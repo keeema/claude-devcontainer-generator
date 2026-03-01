@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Configuring firewall..."
+
+# Flush existing rules
+iptables -F OUTPUT
+iptables -F INPUT
+
+# Allow loopback
+iptables -A OUTPUT -o lo -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+
+# Allow established/related connections
+iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Allow DNS (UDP and TCP port 53)
+iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+
+# Allow SSH (port 22)
+iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
+
+# Whitelist domains
+DOMAINS=(
+  # Claude API
+  api.anthropic.com
+  statsig.anthropic.com
+  sentry.io
+  # Git
+  github.com
+  gitlab.com
+  # Package managers (always included)
+  registry.npmjs.org
+  registry.yarnpkg.com
+  pypi.org
+  files.pythonhosted.org
+  api.nuget.org
+<%_ for (const domain of stack.firewall_domains || []) { _%>
+  <%= domain %>
+<%_ } _%>
+)
+
+for DOMAIN in "${DOMAINS[@]}"; do
+  # Resolve domain to IPs (handles CNAMEs)
+  IPS=$(dig +short "$DOMAIN" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+  if [ -z "$IPS" ]; then
+    echo "Warning: Could not resolve $DOMAIN"
+    continue
+  fi
+  for IP in $IPS; do
+    iptables -A OUTPUT -d "$IP" -j ACCEPT
+  done
+  echo "Allowed: $DOMAIN"
+done
+
+# Default deny OUTPUT
+iptables -A OUTPUT -j DROP
+
+echo "Firewall configured. Only whitelisted domains are accessible."

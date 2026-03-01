@@ -1,0 +1,83 @@
+FROM <%= stack.base_image %>
+
+# Install system tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    zsh \
+    tmux \
+    ripgrep \
+    fzf \
+    curl \
+    jq \
+    sudo \
+    openssh-server \
+<%_ if (!fullInternet) { _%>
+    iptables \
+    dnsutils \
+<%_ } _%>
+    && rm -rf /var/lib/apt/lists/*
+
+<%_ if (stack.name !== 'nodejs') { _%>
+# Install Node.js (needed for Claude Code)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+<%_ } _%>
+# Create non-root user if not exists (Node.js images have 'node', others don't)
+RUN id -u node 2>/dev/null || (groupadd --gid 1000 node \
+    && useradd --uid 1000 --gid node --shell /bin/zsh --create-home node)
+
+# Install oh-my-zsh for node user
+USER node
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
+    && git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions \
+    && git clone https://github.com/zsh-users/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting \
+    && sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' ~/.zshrc
+
+# tmux config
+RUN echo '\
+set -g mouse on\n\
+set -g history-limit 50000\n\
+set -g status-style "bg=colour235,fg=colour136"\n\
+set -g status-left "#[fg=colour46]#S "\n\
+set -g status-right "#[fg=colour136]%H:%M"\n\
+set -g default-terminal "screen-256color"\n\
+' > ~/.tmux.conf
+
+# Command history directory
+USER root
+RUN mkdir -p /commandhistory && chown node:node /commandhistory
+USER node
+RUN echo 'export HISTFILE=/commandhistory/.zsh_history' >> ~/.zshrc \
+    && echo 'export HISTSIZE=10000' >> ~/.zshrc \
+    && echo 'export SAVEHIST=10000' >> ~/.zshrc
+
+# Install Claude Code globally
+USER root
+RUN npm install -g @anthropic-ai/claude-code
+
+# Pre-create .claude dir so empty volume inherits correct ownership
+RUN mkdir -p /home/node/.claude && chown node:node /home/node/.claude
+
+# SSH server for JetBrains IDE access
+RUN mkdir -p /run/sshd \
+    && sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config \
+    && passwd -d node
+
+# Sudoers rule — node can run sshd as root
+RUN echo 'node ALL=(root) NOPASSWD: /usr/sbin/sshd' > /etc/sudoers.d/node-sshd \
+    && chmod 0440 /etc/sudoers.d/node-sshd
+
+<%_ if (!fullInternet) { _%>
+# Copy firewall script
+COPY init-firewall.sh /usr/local/bin/init-firewall.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh
+
+# Sudoers rule — node can only run init-firewall.sh as root
+RUN echo 'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' > /etc/sudoers.d/node-firewall \
+    && chmod 0440 /etc/sudoers.d/node-firewall
+<%_ } _%>
+
+WORKDIR /workspace
+USER node

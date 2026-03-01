@@ -1,0 +1,14 @@
+name: nodejs
+display_name: "Node.js (LTS)"
+base_image: node:22
+tools:
+  - git
+  - zsh
+  - tmux
+  - ripgrep
+  - fzf
+  - curl
+  - jq
+vscode_extensions:
+  - orta.vscode-jest
+firewall_domains: []

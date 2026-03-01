@@ -1,0 +1,61 @@
+name: <%= name %>
+<%_ if (includeCompose) { _%>
+
+include:
+  - path: ../../<%= name %>/docker-compose.yml
+<%_ } _%>
+
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../../<%= name %>:/workspace:cached
+      - claude-shared:/home/node/.claude
+<%_ if (localClaude) { _%>
+      - ../../<%= name %>-devcontainer/.project-claude:/workspace/.claude:cached
+<%_ } _%>
+      - <%= name %>-commandhistory:/commandhistory
+    ports:
+      - "<%= sshPort %>:22"
+    command: >
+      bash -c "sudo /usr/sbin/sshd && tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
+<%_ if (!fullInternet) { _%>
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+<%_ } _%>
+    environment:
+      - CLAUDE_CONFIG_DIR=/home/node/.claude
+<%_ for (const [svcName, svc] of Object.entries(services)) { _%>
+
+  <%= svcName %>:
+    image: <%= svc.image %>
+<%_ if (svc.env) { _%>
+    environment:
+<%_ for (const [key, val] of Object.entries(svc.env)) { _%>
+      - <%= key %>=<%= val %>
+<%_ } _%>
+<%_ } _%>
+<%_ if (svc.ports) { _%>
+    ports:
+<%_ for (const port of svc.ports) { _%>
+      - "<%= port %>"
+<%_ } _%>
+<%_ } _%>
+<%_ if (svc.volumes) { _%>
+    volumes:
+<%_ for (const vol of svc.volumes) { _%>
+      - <%= vol %>
+<%_ } _%>
+<%_ } _%>
+<%_ } _%>
+
+volumes:
+  claude-shared:
+    external: true
+  <%= name %>-commandhistory:
+<%_ for (const volName of Object.keys(serviceVolumes)) { _%>
+  <%= volName %>:
+<%_ } _%>

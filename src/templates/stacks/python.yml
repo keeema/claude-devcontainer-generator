@@ -1,0 +1,16 @@
+name: python
+display_name: "Python"
+base_image: python:3.12
+tools:
+  - git
+  - zsh
+  - tmux
+  - ripgrep
+  - fzf
+  - curl
+  - jq
+vscode_extensions:
+  - ms-python.python
+  - ms-python.vscode-pylance
+  - ms-python.debugpy
+firewall_domains: []

@@ -1,0 +1,20 @@
+{
+  "name": "devcontainer-generator",
+  "version": "0.1.0",
+  "description": "CLI tool for generating devcontainer repositories with Claude Code sandbox",
+  "type": "module",
+  "bin": {
+    "devcontainer-generator": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test 'test/**/*.test.js'"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "ejs": "^3.1.10",
+    "js-yaml": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
