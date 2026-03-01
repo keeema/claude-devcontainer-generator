@@ -1,0 +1,5 @@
+name: redis
+display_name: "Redis"
+image: redis:7
+ports:
+  - "6379:6379"

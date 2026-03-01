@@ -1,0 +1,50 @@
+<%
+const baseExtensions = [
+  "anthropic.claude-code",
+  "esbenp.prettier-vscode",
+  "dbaeumer.vscode-eslint",
+  "biomejs.biome",
+  "eamodio.gitlens",
+  "redhat.vscode-yaml",
+  "streetsidesoftware.code-spell-checker",
+  "streetsidesoftware.code-spell-checker-czech",
+  "hashicorp.terraform",
+  "styled-components.vscode-styled-components",
+  "bierner.markdown-mermaid",
+];
+const extensions = [...baseExtensions];
+if (stack.vscode_extensions) {
+  extensions.push(...stack.vscode_extensions);
+}
+-%>
+{
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": <%- JSON.stringify(extensions) %>,
+      "settings": {
+        "claude-code.enableAutoSkipPermissions": true,
+        "remote.autoForwardPorts": false,
+        "remote.restoreForwardedPorts": false
+      }
+    }
+  },
+
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+  },
+
+  "initializeCommand": ".devcontainer/init.sh"<% if (!fullInternet) { %>,
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand"<% } %>
+}

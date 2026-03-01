@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+TARGET_DIR="$(dirname "$PROJECT_DIR")/<%= name %>"
+
+# Vytvoř sdílený volume pro Claude credentials (pokud neexistuje)
+if ! docker volume inspect claude-shared &>/dev/null; then
+  echo "Creating shared Docker volume: claude-shared"
+  docker volume create claude-shared
+fi
+
+if [ -d "$TARGET_DIR" ]; then
+  echo "Repository already exists at $TARGET_DIR, skipping clone."
+else
+  echo "Cloning <%= repo %> into $TARGET_DIR..."
+  git clone --branch <%= branch %> "<%= repo %>" "$TARGET_DIR"
+  echo "Clone complete."
+fi
+<%_ if (localClaude) { _%>
+
+# Přidej .claude do git exclude zákaznického repa
+EXCLUDE_FILE="$TARGET_DIR/.git/info/exclude"
+if [ -f "$EXCLUDE_FILE" ] && ! grep -q '^\.claude/$' "$EXCLUDE_FILE"; then
+  echo ".claude/" >> "$EXCLUDE_FILE"
+  echo "Added .claude/ to git exclude."
+fi
+<%_ } _%>

@@ -1,0 +1,15 @@
+name: dotnet
+display_name: ".NET Core"
+base_image: mcr.microsoft.com/dotnet/sdk:9.0
+tools:
+  - git
+  - zsh
+  - tmux
+  - ripgrep
+  - fzf
+  - curl
+  - jq
+vscode_extensions:
+  - ms-dotnettools.csharp
+  - ms-dotnettools.csdevkit
+firewall_domains: []

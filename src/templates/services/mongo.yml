@@ -1,0 +1,10 @@
+name: mongo
+display_name: "MongoDB"
+image: mongo:7
+env:
+  MONGO_INITDB_ROOT_USERNAME: dev
+  MONGO_INITDB_ROOT_PASSWORD: dev
+ports:
+  - "27017:27017"
+volumes:
+  - mongodata:/data/db
