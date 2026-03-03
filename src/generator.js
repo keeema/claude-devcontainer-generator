@@ -122,9 +122,10 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
    echo "https://<github-user>:<PAT>@github.com" > ~/.git-credentials
    (nebo nechte git se zeptat při prvním push/pull — uloží automaticky)
 ${claudeInfo}
-${jetbrainsStep}. JetBrains IDE (PyCharm, IntelliJ, ...):
-   Přidejte SSH Remote Interpreter:
-   - Host: localhost, Port: ${sshPort}, User: node (bez hesla)
-   - Path mapping: <lokální cesta> → /workspace
+${jetbrainsStep}. JetBrains IDE (PyCharm, IntelliJ, ...) — přes Gateway:
+   - Kontejner exposuje SSH na portu ${sshPort} (mapovaný z kontejneru :22)
+   - PyCharm Gateway → SSH na <hostname>:${sshPort}, user: node, bez hesla
+   - Backend běží uvnitř kontejneru, otevřete /workspace
+   - Interpreter (Python/Node) je přímo v kontejneru, žádná další konfigurace
 `);
 }
