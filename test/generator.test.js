@@ -306,6 +306,39 @@ describe('generate', () => {
     assert.ok(!content.includes('2222:22'));
   });
 
+  // --- Git credentials isolation ---
+
+  it('devcontainer.json has remoteEnv to block VS Code git credential forwarding', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_MAIN, '');
+    assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_NODE, '');
+    assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_EXTRA_ARGS, '');
+    assert.equal(json.remoteEnv.VSCODE_GIT_IPC_HANDLE, '');
+    assert.equal(json.remoteEnv.GIT_ASKPASS, '');
+  });
+
+  it('devcontainer.json disables git.terminalAuthentication', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.customizations.vscode.settings['git.terminalAuthentication'], false);
+  });
+
+  it('devcontainer.json sets gitCredentialHelperConfigLocation to none', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.customizations.vscode.settings['dev.containers.gitCredentialHelperConfigLocation'], 'none');
+  });
+
+  it('Dockerfile sets git credential.helper to store', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes("credential.helper 'store --file /home/node/.git-credentials'"));
+  });
+
   // --- Include compose ---
 
   it('no include section by default', () => {

@@ -81,3 +81,4 @@ RUN echo 'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' > /etc/sudo
 
 WORKDIR /workspace
 USER node
+RUN git config --global credential.helper 'store --file /home/node/.git-credentials'
