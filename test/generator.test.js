@@ -306,6 +306,64 @@ describe('generate', () => {
     assert.ok(!content.includes('2222:22'));
   });
 
+  // --- Port forwarding ---
+
+  it('forwardPorts contains SSH port without services', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.deepEqual(json.forwardPorts, [2222]);
+  });
+
+  it('forwardPorts uses custom SSH port', () => {
+    generate(opts({ sshPort: 3333 }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.deepEqual(json.forwardPorts, [3333]);
+  });
+
+  it('forwardPorts includes service ports', () => {
+    generate(opts({ services: ['postgres', 'redis'] }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.ok(json.forwardPorts.includes(2222));
+    assert.ok(json.forwardPorts.includes(5432));
+    assert.ok(json.forwardPorts.includes(6379));
+  });
+
+  it('portsAttributes has SSH label', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.portsAttributes['2222'].label, 'SSH');
+    assert.equal(json.portsAttributes['2222'].onAutoForward, 'silent');
+  });
+
+  it('portsAttributes has service labels', () => {
+    generate(opts({ services: ['postgres', 'redis'] }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.portsAttributes['5432'].label, 'PostgreSQL');
+    assert.equal(json.portsAttributes['6379'].label, 'Redis');
+  });
+
+  it('azurite multi-port forwarding', () => {
+    generate(opts({ services: ['azurite'] }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.ok(json.forwardPorts.includes(10000));
+    assert.ok(json.forwardPorts.includes(10001));
+    assert.ok(json.forwardPorts.includes(10002));
+    assert.equal(json.portsAttributes['10000'].label, 'Azurite (Azure Storage Emulator)');
+  });
+
+  it('otherPortsAttributes remains ignore', () => {
+    generate(opts({ services: ['postgres'] }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = JSON.parse(content);
+    assert.equal(json.otherPortsAttributes.onAutoForward, 'ignore');
+  });
+
   // --- Git credentials isolation ---
 
   it('devcontainer.json has remoteEnv to block VS Code git credential forwarding', () => {

@@ -16,6 +16,20 @@ const extensions = [...baseExtensions];
 if (stack.vscode_extensions) {
   extensions.push(...stack.vscode_extensions);
 }
+
+// Build forwardPorts and portsAttributes
+const forwardPorts = [sshPort];
+const portsAttributes = {};
+portsAttributes[String(sshPort)] = { label: "SSH", onAutoForward: "silent" };
+
+for (const [svcName, svc] of Object.entries(services)) {
+  if (!svc.ports) continue;
+  for (const portMapping of svc.ports) {
+    const hostPort = parseInt(portMapping.split(':')[0], 10);
+    forwardPorts.push(hostPort);
+    portsAttributes[String(hostPort)] = { label: svc.display_name, onAutoForward: "silent" };
+  }
+}
 -%>
 {
   "dockerComposeFile": "docker-compose.yml",
@@ -35,6 +49,10 @@ if (stack.vscode_extensions) {
       }
     }
   },
+
+  "forwardPorts": <%- JSON.stringify(forwardPorts) %>,
+
+  "portsAttributes": <%- JSON.stringify(portsAttributes, null, 2).replace(/\n/g, '\n  ') %>,
 
   "otherPortsAttributes": {
     "onAutoForward": "ignore"
