@@ -93,13 +93,13 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
   let claudeInfo = '';
   if (localClaude) {
     claudeInfo = `
-5. Projektové Claude nastavení (.claude/CLAUDE.md) jsou v .project-claude/
+6. Projektové Claude nastavení (.claude/CLAUDE.md) jsou v .project-claude/
    složce tohoto devcontainer repa — commitujte je do gitu.
    .claude/ je automaticky přidán do git exclude zákaznického repa.
 `;
   }
 
-  const jetbrainsStep = localClaude ? '6' : '5';
+  const jetbrainsStep = localClaude ? '7' : '6';
 
   console.log(`
 === Devcontainer vygenerován: ${output} ===
@@ -117,6 +117,10 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
 
 4. Odpojení (Claude dál pracuje):
    Ctrl+B, pak D
+
+5. Nastavení git credentials (při prvním použití):
+   echo "https://<github-user>:<PAT>@github.com" > ~/.git-credentials
+   (nebo nechte git se zeptat při prvním push/pull — uloží automaticky)
 ${claudeInfo}
 ${jetbrainsStep}. JetBrains IDE (PyCharm, IntelliJ, ...):
    Přidejte SSH Remote Interpreter:

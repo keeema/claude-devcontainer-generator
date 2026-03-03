@@ -43,6 +43,7 @@ Založený na base image podle zvoleného stacku (Node.js, Python, .NET). Obsahu
 - **Firewall script** (bez `--full-internet`): zkopírovaný do `/usr/local/bin/init-firewall.sh` s sudo oprávněním pro uživatele `node`
 - **Uživatel `node`:** kontejner běží jako neprivilegovaný uživatel, ne root (vytvořen pokud neexistuje)
 - **Sudoers pravidlo** (bez `--full-internet`): uživatel `node` smí spustit jen `init-firewall.sh` jako root, nic jiného
+- **Git credential isolation:** `credential.helper=store` s persistentním souborem, VS Code credential forwarding je zablokovaný přes settings a remoteEnv
 
 #### 2. init-firewall.sh — síťová izolace (volitelná)
 
@@ -75,7 +76,9 @@ S `--full-internet`: firewall se přeskočí, žádné `NET_ADMIN`/`NET_RAW`, ž
     "vscode": {
       "extensions": ["anthropic.claude-code"],
       "settings": {
-        "claude-code.enableAutoSkipPermissions": true
+        "claude-code.enableAutoSkipPermissions": true,
+        "git.terminalAuthentication": false,
+        "dev.containers.gitCredentialHelperConfigLocation": "none"
       }
     }
   },
@@ -84,6 +87,14 @@ S `--full-internet`: firewall se přeskočí, žádné `NET_ADMIN`/`NET_RAW`, ž
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true"
+  },
+
+  "remoteEnv": {
+    "VSCODE_GIT_ASKPASS_MAIN": "",
+    "VSCODE_GIT_ASKPASS_NODE": "",
+    "VSCODE_GIT_ASKPASS_EXTRA_ARGS": "",
+    "VSCODE_GIT_IPC_HANDLE": "",
+    "GIT_ASKPASS": ""
   },
 
   "initializeCommand": ".devcontainer/init.sh",
