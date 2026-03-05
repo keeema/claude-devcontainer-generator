@@ -65,18 +65,14 @@ RUN mkdir -p /run/sshd \
     && sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config \
     && passwd -d node
 
-# Sudoers rules — node can run sshd and apt as root
-RUN echo 'node ALL=(root) NOPASSWD: /usr/sbin/sshd, /usr/bin/apt-get, /usr/bin/apt' > /etc/sudoers.d/node-sshd \
-    && chmod 0440 /etc/sudoers.d/node-sshd
+# Sudoers — full sudo for node (devcontainer is an isolated environment)
+RUN echo 'node ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/node \
+    && chmod 0440 /etc/sudoers.d/node
 
 <%_ if (!fullInternet) { _%>
 # Copy firewall script
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
 RUN chmod +x /usr/local/bin/init-firewall.sh
-
-# Sudoers rule — node can only run init-firewall.sh as root
-RUN echo 'node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' > /etc/sudoers.d/node-firewall \
-    && chmod 0440 /etc/sudoers.d/node-firewall
 <%_ } _%>
 
 WORKDIR /workspace
