@@ -121,7 +121,7 @@ services:
       - <nazev>-claude-project:/workspace/.claude # projektový Claude config
       - <nazev>-commandhistory:/commandhistory # bash/zsh historie (per-projekt)
     command: >
-      bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
+      bash -c "sudo npm i -g @anthropic-ai/claude-code && tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
     # Pozn.: Při prvním spuštění (bez OAuth credentials ve volume) Claude
     # čeká na přihlášení. Vývojář se připojí přes "tmux attach -t claude",
     # dokončí OAuth login, a od té chvíle auto-start funguje.
