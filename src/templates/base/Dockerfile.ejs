@@ -53,10 +53,14 @@ RUN echo 'export HISTFILE=/commandhistory/.zsh_history' >> ~/.zshrc \
     && echo 'export HISTSIZE=10000' >> ~/.zshrc \
     && echo 'export SAVEHIST=10000' >> ~/.zshrc
 
-# Install Claude Code globally
-USER root
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code (native installer — auto-updates without root)
+USER node
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# Ensure ~/.local/bin is on PATH for node user (native Claude binary lives there)
+ENV PATH="/home/node/.local/bin:${PATH}"
+
+USER root
 # Pre-create .claude dir so empty volume inherits correct ownership
 RUN mkdir -p /home/node/.claude && chown node:node /home/node/.claude
 
