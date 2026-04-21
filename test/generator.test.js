@@ -279,6 +279,27 @@ describe('generate', () => {
     assert.ok(!content.includes('exclude'));
   });
 
+  // --- Claude Code installation ---
+
+  it('Dockerfile uses native installer for Claude Code, not npm install -g', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('https://claude.ai/install.sh'));
+    assert.ok(!content.includes('npm install -g @anthropic-ai/claude-code'));
+  });
+
+  it('Dockerfile puts /home/node/.local/bin on PATH', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('/home/node/.local/bin'));
+  });
+
+  it('docker-compose.yml command does not reinstall Claude Code at startup', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(!content.includes('npm i -g @anthropic-ai/claude-code'));
+  });
+
   // --- SSH server ---
 
   it('Dockerfile contains openssh-server', () => {

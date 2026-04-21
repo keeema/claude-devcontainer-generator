@@ -39,7 +39,7 @@ Založený na base image podle zvoleného stacku (Node.js, Python, .NET). Obsahu
 
 - **Vývojářské nástroje:** git, zsh (s oh-my-zsh a pluginy), tmux (s rozumným výchozím .tmux.conf — historie, myš, status bar), ripgrep, fzf, curl, jq
 - **Node.js:** automaticky doinstalovaný pro non-Node stacky (Python, .NET) — potřeba pro Claude Code
-- **Claude Code:** nainstalovaný globálně přes npm (`npm install -g @anthropic-ai/claude-code`)
+- **Claude Code:** nainstalovaný přes nativní instalátor (`curl -fsSL https://claude.ai/install.sh | bash`) jako uživatel `node` — auto-update funguje bez rootu (binárka v `~/.local/bin/claude`, update data v `~/.local/share/claude`)
 - **Firewall script** (bez `--full-internet`): zkopírovaný do `/usr/local/bin/init-firewall.sh`
 - **Uživatel `node`:** kontejner běží jako neprivilegovaný uživatel, ne root (vytvořen pokud neexistuje)
 - **Sudo bez omezení:** `node ALL=(root) NOPASSWD: ALL` — devcontainer je izolované prostředí, granulární omezování sudo je zbytečné
@@ -121,7 +121,7 @@ services:
       - <nazev>-claude-project:/workspace/.claude # projektový Claude config
       - <nazev>-commandhistory:/commandhistory # bash/zsh historie (per-projekt)
     command: >
-      bash -c "sudo npm i -g @anthropic-ai/claude-code && tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
+      bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
     # Pozn.: Při prvním spuštění (bez OAuth credentials ve volume) Claude
     # čeká na přihlášení. Vývojář se připojí přes "tmux attach -t claude",
     # dokončí OAuth login, a od té chvíle auto-start funguje.
