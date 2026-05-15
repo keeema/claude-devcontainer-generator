@@ -24,6 +24,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 <%_ } _%>
+# GitHub CLI (gh) — official apt repo
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user if not exists (Node.js images have 'node', others don't)
 RUN id -u node 2>/dev/null || (groupadd --gid 1000 node \
     && useradd --uid 1000 --gid node --shell /bin/zsh --create-home node)
@@ -53,6 +63,15 @@ RUN echo 'export HISTFILE=/commandhistory/.zsh_history' >> ~/.zshrc \
     && echo 'export HISTSIZE=10000' >> ~/.zshrc \
     && echo 'export SAVEHIST=10000' >> ~/.zshrc
 
+# Reuse the PAT stored in ~/.git-credentials for gh CLI.
+# Lives in .zshenv (not .zshrc) so non-interactive shells (Claude Code Bash tool, scripts) get it too.
+RUN cat >> ~/.zshenv <<'EOF'
+if [ -r "$HOME/.git-credentials" ]; then
+  GH_TOKEN=$(grep -oP '(?<=:)[^:@]+(?=@github\.com)' "$HOME/.git-credentials" | head -1)
+  [ -n "$GH_TOKEN" ] && export GH_TOKEN
+fi
+EOF
+
 # Install Claude Code (native installer — auto-updates without root)
 USER node
 RUN curl -fsSL https://claude.ai/install.sh | bash
@@ -63,6 +82,9 @@ ENV PATH="/home/node/.local/bin:${PATH}"
 USER root
 # Pre-create .claude dir so empty volume inherits correct ownership
 RUN mkdir -p /home/node/.claude && chown node:node /home/node/.claude
+
+# Pre-create .gitcreds dir so the empty per-devcontainer volume inherits correct ownership
+RUN mkdir -p /home/node/.gitcreds && chown node:node /home/node/.gitcreds
 
 # SSH server for JetBrains IDE access
 RUN mkdir -p /run/sshd \
@@ -81,4 +103,7 @@ RUN chmod +x /usr/local/bin/init-firewall.sh
 
 WORKDIR /workspace
 USER node
-RUN git config --global credential.helper 'store --file /home/node/.git-credentials'
+# ~/.git-credentials is a symlink into the persistent .gitcreds volume,
+# so the PAT survives container rebuilds without changing the usual path.
+RUN ln -sf /home/node/.gitcreds/.git-credentials /home/node/.git-credentials \
+    && git config --global credential.helper 'store --file /home/node/.git-credentials'

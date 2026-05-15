@@ -13,6 +13,7 @@ services:
     volumes:
       - ../../<%= name %>:/workspace:cached
       - claude-shared:/home/node/.claude
+      - <%= name %>-git-credentials:/home/node/.gitcreds
 <%_ if (localClaude) { _%>
       - ../../<%= name %>-devcontainer/.project-claude:/workspace/.claude:cached
 <%_ } _%>
@@ -54,6 +55,8 @@ services:
 
 volumes:
   claude-shared:
+    external: true
+  <%= name %>-git-credentials:
     external: true
   <%= name %>-commandhistory:
 <%_ for (const volName of Object.keys(serviceVolumes)) { _%>
