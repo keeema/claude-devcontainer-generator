@@ -11,6 +11,13 @@ if ! docker volume inspect claude-shared &>/dev/null; then
   docker volume create claude-shared
 fi
 
+# Per-devcontainer volume pro git credentials (PAT). Je external: true —
+# záměrně mimo Docker Compose, takže přežije i `docker compose down -v`.
+if ! docker volume inspect <%= name %>-git-credentials &>/dev/null; then
+  echo "Creating Docker volume: <%= name %>-git-credentials"
+  docker volume create <%= name %>-git-credentials
+fi
+
 if [ -d "$TARGET_DIR" ]; then
   echo "Repository already exists at $TARGET_DIR, skipping clone."
 else

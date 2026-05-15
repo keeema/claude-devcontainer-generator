@@ -47,9 +47,10 @@ VS Code detekuje `.devcontainer/` a nabídne **"Reopen in Container"** (nebo př
 
 Při prvním spuštění se automaticky:
 1. Naklonuje projektové repo vedle devcontaineru
-2. Vytvoří sdílený Docker volume `claude-credentials` (pokud neexistuje)
-3. Postaví Docker image s vývojářskými nástroji a Claude Code
-4. Spustí kontejner a Claude Code nastartuje v tmux session
+2. Vytvoří sdílený Docker volume `claude-shared` (pokud neexistuje)
+3. Vytvoří per-devcontainer volume `<nazev>-git-credentials` (pokud neexistuje)
+4. Postaví Docker image s vývojářskými nástroji a Claude Code
+5. Spustí kontejner a Claude Code nastartuje v tmux session
 
 ### 4. Připoj se ke Claude Code
 
@@ -90,12 +91,13 @@ Můžeš zavřít VS Code a Claude pracuje dál. Při dalším otevření se jen
 
 | Volume | Mount | Účel | Sdílení |
 |--------|-------|------|---------|
-| `claude-credentials` | `/home/node/.claude` | OAuth tokeny, globální nastavení | Across všechny projekty |
+| `claude-shared` | `/home/node/.claude` | OAuth tokeny, globální nastavení | Across všechny devcontainery |
+| `<nazev>-git-credentials` | `/home/node/.gitcreds` | Git PAT (`~/.git-credentials`) | Per devcontainer |
 | `<nazev>-claude-project` | `/workspace/.claude` | CLAUDE.md, projektové nastavení | Per projekt |
 | `<nazev>-commandhistory` | `/commandhistory` | Bash/zsh historie | Per projekt |
 | Bind mount | `/workspace` | Zdrojový kód projektu | — |
 
-Všechny volumes přežijí rebuild kontejneru. `claude-credentials` se vytvoří automaticky při prvním spuštění.
+Všechny volumes přežijí rebuild kontejneru. `claude-shared` a `<nazev>-git-credentials` se vytvoří automaticky při prvním spuštění (`init.sh`). Oba jsou `external: true`, takže `<nazev>-git-credentials` přežije i `docker compose down -v` — token zadáváš jen jednou za celý život devcontaineru.
 
 ## CLI parametry
 
@@ -172,6 +174,28 @@ Ve výchozím stavu kontejner povoluje jen:
 - **DNS a SSH**
 
 Vše ostatní je blokováno přes iptables (kontejner má `NET_ADMIN` capability). Pro plný přístup k internetu použij `--full-internet` — firewall se vůbec nevytvoří.
+
+## Git credentials (PAT)
+
+Devcontainer nikdy nepřebírá git credentials z hostitele (VS Code credential forwarding je vypnutý). Místo toho používáš **fine-grained Personal Access Token**, který se uloží do `~/.git-credentials` a **přežije rebuild kontejneru**.
+
+### Jak token nastavit
+
+Uvnitř kontejneru (terminál ve VS Code nebo `tmux attach -t claude`) jednou spusť:
+
+```bash
+echo "https://<github-user>:<fine-grained-PAT>@github.com" > ~/.git-credentials
+```
+
+To je vše — `git push`/`pull` i `gh` od teď fungují. `gh` CLI si token načte automaticky přes `GH_TOKEN`, který se při startu shellu parsuje z `~/.git-credentials` (nastaveno v `~/.zshenv`).
+
+### Proč to přežije rebuild
+
+`~/.git-credentials` je symlink do per-devcontainer Docker volume `<nazev>-git-credentials`. Kanonická cesta se nemění, takže workflow ani `GH_TOKEN` parsing nic nepoznají — data jen leží na persistentním externím volume.
+
+Volume je `external: true` — záměrně **není** spravovaný Docker Compose, takže přežije i `docker compose down -v`. Token tedy zadáváš jen jednou za celý život devcontaineru.
+
+Na rozdíl od `claude-shared` (sdílený přes všechny devcontainery jednoho uživatele) je `<nazev>-git-credentials` **per-devcontainer** — každý projekt má vlastní token.
 
 ## Práce s Claude Code
 

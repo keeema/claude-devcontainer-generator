@@ -432,6 +432,72 @@ describe('generate', () => {
     assert.ok(content.includes('include:'));
     assert.ok(content.includes('../../testproject/docker-compose.yml'));
   });
+
+  // --- gh CLI ---
+
+  it('Dockerfile installs gh CLI from official apt repo', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('cli.github.com/packages'));
+    assert.ok(content.includes('apt-get install -y --no-install-recommends gh'));
+  });
+
+  it('Dockerfile exports GH_TOKEN from .git-credentials in .zshenv', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('~/.zshenv'));
+    assert.ok(content.includes('export GH_TOKEN'));
+    assert.ok(content.includes('@github\\.com'));
+  });
+
+  it('GH_TOKEN snippet is in .zshenv, not .zshrc', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    const lines = content.split('\n');
+    assert.ok(lines.some(l => l.includes('GH_TOKEN')), 'expected a line containing GH_TOKEN');
+    assert.ok(/RUN cat >> ~\/\.zshenv <<'EOF'/.test(content), 'GH_TOKEN snippet must append to ~/.zshenv');
+    assert.ok(!lines.some(l => /GH_TOKEN/.test(l) && />>\s*~\/\.zshrc/.test(l)), 'GH_TOKEN must not be appended to .zshrc');
+  });
+
+  // --- Persistent git credentials (PAT) ---
+
+  it('docker-compose.yml mounts the per-devcontainer git-credentials volume', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('testproject-git-credentials:/home/node/.gitcreds'));
+  });
+
+  it('docker-compose.yml declares git-credentials volume as external', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(/testproject-git-credentials:\n\s+external: true/.test(content));
+  });
+
+  it('git-credentials volume name follows the compose project name', () => {
+    generate(opts({ name: 'mvz' }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('mvz-git-credentials:/home/node/.gitcreds'));
+    assert.ok(!content.includes('testproject-git-credentials'));
+  });
+
+  it('Dockerfile pre-creates .gitcreds dir with node ownership', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('mkdir -p /home/node/.gitcreds && chown node:node /home/node/.gitcreds'));
+  });
+
+  it('Dockerfile symlinks the canonical ~/.git-credentials into the volume', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('ln -sf /home/node/.gitcreds/.git-credentials /home/node/.git-credentials'));
+  });
+
+  it('init.sh creates the external git-credentials volume if missing', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'init.sh'), 'utf-8');
+    assert.ok(content.includes('docker volume inspect testproject-git-credentials'));
+    assert.ok(content.includes('docker volume create testproject-git-credentials'));
+  });
 });
 
 describe('nameFromRepo', () => {

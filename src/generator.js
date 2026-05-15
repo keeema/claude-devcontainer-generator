@@ -118,9 +118,10 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
 4. Odpojení (Claude dál pracuje):
    Ctrl+B, pak D
 
-5. Nastavení git credentials (při prvním použití):
-   echo "https://<github-user>:<PAT>@github.com" > ~/.git-credentials
-   (nebo nechte git se zeptat při prvním push/pull — uloží automaticky)
+5. Nastavení git credentials (jednou — přežije rebuild i compose down -v):
+   echo "https://<github-user>:<fine-grained-PAT>@github.com" > ~/.git-credentials
+   Uloženo v externím volume ${name}-git-credentials. gh CLI si token
+   načte automaticky přes GH_TOKEN.
 ${claudeInfo}
 ${jetbrainsStep}. JetBrains IDE (PyCharm, IntelliJ, ...) — přes Gateway:
    - Kontejner exposuje SSH na portu ${sshPort} (mapovaný z kontejneru :22)
