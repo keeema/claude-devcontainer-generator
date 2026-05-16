@@ -1,0 +1,143 @@
+# <%= name %> — devcontainer
+
+Izolovaný vývojový kontejner s předinstalovaným Claude Code pro projekt
+**<%= name %>** (`<%= repo %>`, branch `<%= branch %>`).
+
+Toto repo je **oddělené** od zákaznického projektu — do zákaznického repa
+se nedostane žádný `.devcontainer/` ani `.claude/`.
+
+## Co je uvnitř
+
+- **Stack:** <%= stack.display_name %> (`<%= stack.base_image %>`)
+- **Nástroje:** <%= stack.tools.join(', ') %> (zsh s oh-my-zsh), gh CLI<%= stack.name !== 'nodejs' ? ', Node.js (pro Claude Code)' : '' %>
+- **Claude Code:** nativní instalace s auto-updatem, běží v tmux session
+<%_ if (Object.keys(services).length) { _%>
+- **Služby:**
+<%_ for (const svc of Object.values(services)) { _%>
+  - <%= svc.display_name %> (`<%= svc.image %>`)
+<%_ } _%>
+<%_ } _%>
+- **Síť:** <%= fullInternet ? 'plný přístup k internetu (bez firewallu)' : 'firewall s default-deny politikou (whitelist domén)' %>
+
+## Předpoklady
+
+- Docker Desktop nebo Docker Engine
+- VS Code s rozšířením **Dev Containers** (nebo JetBrains Gateway přes SSH)
+- Přístup k `<%= repo %>` (SSH klíč nebo PAT)
+
+## Struktura na disku
+
+`init.sh` se spustí automaticky před startem kontejneru a naklonuje
+zákaznické repo jako **sourozenecký** adresář vedle tohoto repa:
+
+```
+<rodičovský-adresář>/
+  ├── <toto-repo>/      ← devcontainer (spouští se odtud)
+  └── <%= name %>/      ← zákaznické repo (naklonuje se sem, mount → /workspace)
+```
+
+## První spuštění
+
+1. Otevři tento adresář ve VS Code:
+
+   ```bash
+   code .
+   ```
+
+2. **"Reopen in Container"** (Command Palette → `Dev Containers: Reopen in Container`).
+
+   Automaticky se:
+   - naklonuje `<%= repo %>` (branch `<%= branch %>`) vedle tohoto repa
+   - vytvoří Docker volumes (`claude-shared`, `<%= name %>-git-credentials`, …)
+   - postaví image a nastartuje kontejner; Claude Code se spustí v tmux
+
+## Claude Code (tmux)
+
+Claude běží automaticky v tmux session `claude`:
+
+```bash
+tmux attach -t claude     # připojení
+# Ctrl+B, pak D            # odpojení (Claude pracuje dál na pozadí)
+```
+
+Při **prvním** spuštění čeká Claude na OAuth přihlášení — připoj se přes
+`tmux attach -t claude` a dokonči login. Token se uloží do volume
+`claude-shared` (sdílený přes všechny tvé devcontainery), takže příště
+Claude nastartuje rovnou.
+
+Z jiného stroje:
+
+```bash
+docker exec -it <kontejner> bash
+tmux attach -t claude
+```
+
+## Git credentials (PAT)
+
+Devcontainer **nepřebírá** git credentials z hostitele. Jednou zadej
+fine-grained Personal Access Token (uvnitř kontejneru):
+
+```bash
+echo "https://<github-user>:<fine-grained-PAT>@github.com" > ~/.git-credentials
+```
+
+`~/.git-credentials` je symlink do externího volume
+`<%= name %>-git-credentials`, takže token **přežije rebuild i
+`docker compose down -v`** — zadáváš ho jen jednou za život devcontaineru.
+`git push`/`pull` i `gh` ho od té chvíle používají (`gh` přes `GH_TOKEN`,
+parsovaný z `~/.git-credentials` při startu shellu).
+<%_ if (!fullInternet) { _%>
+
+## Firewall
+
+Kontejner má default-deny iptables firewall
+(`.devcontainer/init-firewall.sh`, spouští se přes `postStartCommand`,
+kontejner čeká na jeho dokončení). Povolené je jen nezbytné: Claude API,
+GitHub/GitLab, package registry (npm/yarn/pip/nuget<%= stack.firewall_domains && stack.firewall_domains.length ? ', ' + stack.firewall_domains.join(', ') : '' %>),
+DNS a SSH. Vše ostatní je blokováno.
+
+Pro plný přístup k internetu přegeneruj devcontainer s `--full-internet`.
+<%_ } _%>
+
+## JetBrains IDE (volitelné)
+
+Kontejner exposuje SSH na portu **<%= sshPort %>** (mapováno z kontejneru `:22`):
+
+- JetBrains Gateway → *New SSH connection* → `<hostname>:<%= sshPort %>`,
+  user `node`, bez hesla
+- Backend běží uvnitř kontejneru, otevři `/workspace`
+<%_ if (localClaude) { _%>
+
+## Projektová Claude konfigurace
+
+Soubory v `.project-claude/` se mountují do `/workspace/.claude` — sem patří
+`CLAUDE.md` a projektová nastavení. Tyto soubory **commituj do tohoto repa**.
+`.claude/` je automaticky přidán do git exclude zákaznického repa.
+<%_ } _%>
+
+## Persistentní data (Docker volumes)
+
+| Volume | Mount | Účel | Sdílení |
+|--------|-------|------|---------|
+| `claude-shared` | `/home/node/.claude` | OAuth, globální nastavení | všechny devcontainery |
+| `<%= name %>-git-credentials` | `/home/node/.gitcreds` | git PAT | jen tento devcontainer |
+| `<%= name %>-commandhistory` | `/commandhistory` | historie shellu | tento projekt |
+<%_ for (const volName of Object.keys(serviceVolumes)) { _%>
+| `<%= volName %>` | (data služby) | persistentní data služby | tento projekt |
+<%_ } _%>
+| bind mount | `/workspace` | zdrojový kód `<%= name %>` | — |
+
+Všechny volumes přežijí rebuild kontejneru. `claude-shared` a
+`<%= name %>-git-credentials` jsou `external: true` a vytvoří je `init.sh`,
+pokud chybí.
+
+## project.yml
+
+Konfigurace pro `init.sh`:
+
+```yaml
+repo: <%= repo %>
+branch: <%= branch %>
+```
+
+Při změně repa nebo branch uprav `project.yml` a rebuildni kontejner.

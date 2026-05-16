@@ -24,10 +24,11 @@ CLI nástroj v Node.js, který generuje kompletní devcontainer repozitáře pro
   │   ├── Dockerfile
   │   ├── init-firewall.sh       ← iptables pravidla, whitelist domén
   │   └── init.sh                ← naklonuje zákaznické repo pokud neexistuje
+  ├── README.md                  ← návod pro vývojáře (project-specific)
   └── project.yml                ← konfigurace projektu (repo URL, branch, cesty)
 ```
 
-Po vygenerování CLI vypíše instrukce: jak spustit kontejner, jak vytvořit `.claude/CLAUDE.md` v projektu, jak přidat `.claude/` do `.gitignore` zákaznického repa.
+Po vygenerování CLI vypíše stručné instrukce a ukáže na vygenerovaný `README.md`, který obsahuje kompletní project-specific návod (jak spustit kontejner, tmux, git PAT, JetBrains, volumes).
 
 ### Požadavek: plně funkční Claude Code sandbox
 
@@ -293,6 +294,7 @@ devcontainer-generator/
   │       │   ├── Dockerfile.ejs
   │       │   ├── init-firewall.sh.ejs
   │       │   ├── init.sh.ejs
+  │       │   ├── README.md.ejs
   │       │   └── project.yml.ejs
   │       ├── stacks/             ← SDK/runtime definice
   │       │   ├── nodejs.yml
