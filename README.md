@@ -83,6 +83,7 @@ Můžeš zavřít VS Code a Claude pracuje dál. Při dalším otevření se jen
   │   │   ├── Dockerfile           ← base image, nástroje, Claude Code
   │   │   ├── init-firewall.sh     ← iptables whitelist (pokud není --full-internet)
   │   │   └── init.sh              ← klonuje projektové repo, vytvoří volumes
+  │   ├── README.md                ← project-specific návod pro vývojáře
   │   └── project.yml              ← metadata projektu (repo URL, branch)
   └── mujprojekt/                  ← projektové repo (naklonované automaticky)
 ```

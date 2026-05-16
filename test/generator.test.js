@@ -60,6 +60,7 @@ describe('generate', () => {
   it('creates all output files in correct structure', () => {
     generate(opts());
     const devcontainerDir = join(outputDir, '.devcontainer');
+    assert.ok(existsSync(join(outputDir, 'README.md')));
     assert.ok(existsSync(join(outputDir, 'project.yml')));
     assert.ok(existsSync(join(devcontainerDir, 'init.sh')));
     assert.ok(existsSync(join(devcontainerDir, 'init-firewall.sh')));
@@ -497,6 +498,69 @@ describe('generate', () => {
     const content = readFileSync(join(outputDir, '.devcontainer', 'init.sh'), 'utf-8');
     assert.ok(content.includes('docker volume inspect testproject-git-credentials'));
     assert.ok(content.includes('docker volume create testproject-git-credentials'));
+  });
+
+  // --- Generated README ---
+
+  it('README.md contains project name, repo and branch', () => {
+    generate(opts({ branch: 'develop' }));
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('# testproject — devcontainer'));
+    assert.ok(content.includes('git@github.com:test/repo.git'));
+    assert.ok(content.includes('branch `develop`'));
+  });
+
+  it('README.md documents the stack', () => {
+    generate(opts({ stack: 'python' }));
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('Python'));
+    assert.ok(content.includes('python:3.12'));
+    assert.ok(content.includes('Node.js (pro Claude Code)'));
+  });
+
+  it('README.md explains tmux and the PAT echo command', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('tmux attach -t claude'));
+    assert.ok(content.includes('> ~/.git-credentials'));
+    assert.ok(content.includes('testproject-git-credentials'));
+  });
+
+  it('README.md has firewall section by default', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('## Firewall'));
+  });
+
+  it('README.md drops firewall section with fullInternet', () => {
+    generate(opts({ fullInternet: true }));
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(!content.includes('## Firewall'));
+    assert.ok(content.includes('plný přístup k internetu'));
+  });
+
+  it('README.md lists selected services', () => {
+    generate(opts({ services: ['postgres', 'redis'] }));
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('PostgreSQL'));
+    assert.ok(content.includes('Redis'));
+    assert.ok(content.includes('pgdata'));
+  });
+
+  it('README.md has project-Claude section only with localClaude', () => {
+    generate(opts());
+    let content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(!content.includes('Projektová Claude konfigurace'));
+    rmSync(join(outputDir, 'README.md'));
+    generate(opts({ localClaude: true }));
+    content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('Projektová Claude konfigurace'));
+  });
+
+  it('README.md uses the custom SSH port', () => {
+    generate(opts({ sshPort: 3333 }));
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('3333'));
   });
 });
 

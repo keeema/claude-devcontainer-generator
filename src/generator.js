@@ -69,6 +69,7 @@ export function generate(options) {
 
   // Render všech šablon
   const files = [
+    { template: 'README.md.ejs', output: join(output, 'README.md') },
     { template: 'project.yml.ejs', output: join(output, 'project.yml') },
     { template: 'init.sh.ejs', output: join(devcontainerDir, 'init.sh'), executable: true },
     ...(!fullInternet ? [{ template: 'init-firewall.sh.ejs', output: join(devcontainerDir, 'init-firewall.sh'), executable: true }] : []),
@@ -103,6 +104,8 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
 
   console.log(`
 === Devcontainer vygenerován: ${output} ===
+
+Kompletní návod je ve vygenerovaném ${output}/README.md.
 
 1. Vytvořte sdílený Docker volume (jednou za stroj):
    docker volume create claude-shared
