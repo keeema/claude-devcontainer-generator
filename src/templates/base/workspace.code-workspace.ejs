@@ -1,0 +1,27 @@
+{
+  "folders": [
+    { "path": "<%= name %>" },
+    { "path": "<%= name %>-devcontainer" }
+  ],
+  "settings": {
+    "task.allowAutomaticTasks": "on"
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Claude (tmux)",
+        "type": "shell",
+        "command": "tmux attach -t claude 2>/dev/null || tmux new-session -s claude -c /workspace 'claude --dangerously-skip-permissions'",
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated",
+          "focus": true,
+          "showReuseMessage": false
+        },
+        "runOptions": { "runOn": "folderOpen" },
+        "problemMatcher": []
+      }
+    ]
+  }
+}

@@ -5,6 +5,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generate, extractServiceVolumes, nameFromRepo } from '../src/generator.js';
 
+// devcontainer.json je JSONC (povolené komentáře) — odstraň plné řádkové
+// komentáře před parsováním.
+function parseJsonc(content) {
+  return JSON.parse(content.replace(/^\s*\/\/.*$/gm, ''));
+}
+
 describe('extractServiceVolumes', () => {
   it('extracts named volumes from services', () => {
     const services = {
@@ -62,6 +68,7 @@ describe('generate', () => {
     const devcontainerDir = join(outputDir, '.devcontainer');
     assert.ok(existsSync(join(outputDir, 'README.md')));
     assert.ok(existsSync(join(outputDir, 'project.yml')));
+    assert.ok(existsSync(join(outputDir, 'testproject.code-workspace')));
     assert.ok(existsSync(join(devcontainerDir, 'init.sh')));
     assert.ok(existsSync(join(devcontainerDir, 'init-firewall.sh')));
     assert.ok(existsSync(join(devcontainerDir, 'Dockerfile')));
@@ -118,7 +125,7 @@ describe('generate', () => {
   it('devcontainer.json has base extensions for any stack', () => {
     generate(opts({ stack: 'nodejs' }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     const ext = json.customizations.vscode.extensions;
     assert.ok(ext.includes('anthropic.claude-code'));
     assert.ok(ext.includes('dbaeumer.vscode-eslint'));
@@ -130,14 +137,14 @@ describe('generate', () => {
   it('nodejs stack has jest extension', () => {
     generate(opts({ stack: 'nodejs' }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.ok(json.customizations.vscode.extensions.includes('orta.vscode-jest'));
   });
 
   it('python stack has python extension', () => {
     generate(opts({ stack: 'python' }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.ok(json.customizations.vscode.extensions.includes('ms-python.python'));
   });
 
@@ -203,7 +210,7 @@ describe('generate', () => {
   it('devcontainer.json references devcontainer service', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.service, 'devcontainer');
   });
 
@@ -235,7 +242,7 @@ describe('generate', () => {
   it('fullInternet removes postStartCommand from devcontainer.json', () => {
     generate(opts({ fullInternet: true }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.postStartCommand, undefined);
     assert.equal(json.waitFor, undefined);
   });
@@ -264,7 +271,7 @@ describe('generate', () => {
   it('localClaude adds bind-mount for .claude', () => {
     generate(opts({ localClaude: true }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
-    assert.ok(content.includes('.project-claude:/workspace/.claude:cached'));
+    assert.ok(content.includes('.project-claude:/workspace/testproject/.claude:cached'));
   });
 
   it('localClaude adds .claude to git exclude in init.sh', () => {
@@ -330,59 +337,62 @@ describe('generate', () => {
 
   // --- Port forwarding ---
 
-  it('forwardPorts contains SSH port without services', () => {
+  it('forwardPorts is empty without services (SSH goes via publish)', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.deepEqual(json.forwardPorts, [2222]);
+    const json = parseJsonc(content);
+    assert.deepEqual(json.forwardPorts, []);
   });
 
-  it('forwardPorts uses custom SSH port', () => {
-    generate(opts({ sshPort: 3333 }));
+  it('forwardPorts never contains the SSH port', () => {
+    generate(opts({ sshPort: 3333, services: ['postgres'] }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.deepEqual(json.forwardPorts, [3333]);
+    const json = parseJsonc(content);
+    assert.ok(!json.forwardPorts.includes(3333));
+    assert.ok(!json.forwardPorts.includes(2222));
   });
 
-  it('forwardPorts includes service ports', () => {
+  it('forwardPorts uses "service:port" form for services', () => {
     generate(opts({ services: ['postgres', 'redis'] }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.ok(json.forwardPorts.includes(2222));
-    assert.ok(json.forwardPorts.includes(5432));
-    assert.ok(json.forwardPorts.includes(6379));
+    const json = parseJsonc(content);
+    assert.ok(json.forwardPorts.includes('postgres:5432'));
+    assert.ok(json.forwardPorts.includes('redis:6379'));
+    // holá čísla služeb se už nepoužívají (tunelovala by localhost devcontaineru)
+    assert.ok(!json.forwardPorts.includes(5432));
+    assert.ok(!json.forwardPorts.includes(6379));
   });
 
-  it('portsAttributes has SSH label', () => {
+  it('portsAttributes is keyed by "service:port" with service labels', () => {
+    generate(opts({ services: ['postgres', 'redis'] }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const json = parseJsonc(content);
+    assert.equal(json.portsAttributes['postgres:5432'].label, 'PostgreSQL');
+    assert.equal(json.portsAttributes['postgres:5432'].onAutoForward, 'silent');
+    assert.equal(json.portsAttributes['redis:6379'].label, 'Redis');
+  });
+
+  it('no SSH entry in portsAttributes', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.equal(json.portsAttributes['2222'].label, 'SSH');
-    assert.equal(json.portsAttributes['2222'].onAutoForward, 'silent');
+    const json = parseJsonc(content);
+    assert.ok(!('2222' in json.portsAttributes));
   });
 
-  it('portsAttributes has service labels', () => {
-    generate(opts({ services: ['postgres', 'redis'] }));
-    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.equal(json.portsAttributes['5432'].label, 'PostgreSQL');
-    assert.equal(json.portsAttributes['6379'].label, 'Redis');
-  });
-
-  it('azurite multi-port forwarding', () => {
+  it('azurite multi-port forwarding via "service:port"', () => {
     generate(opts({ services: ['azurite'] }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
-    assert.ok(json.forwardPorts.includes(10000));
-    assert.ok(json.forwardPorts.includes(10001));
-    assert.ok(json.forwardPorts.includes(10002));
-    assert.equal(json.portsAttributes['10000'].label, 'Azurite (Azure Storage Emulator)');
+    const json = parseJsonc(content);
+    assert.ok(json.forwardPorts.includes('azurite:10000'));
+    assert.ok(json.forwardPorts.includes('azurite:10001'));
+    assert.ok(json.forwardPorts.includes('azurite:10002'));
+    assert.equal(json.portsAttributes['azurite:10000'].label, 'Azurite (Azure Storage Emulator)');
   });
 
   it('otherPortsAttributes remains ignore', () => {
     generate(opts({ services: ['postgres'] }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.otherPortsAttributes.onAutoForward, 'ignore');
   });
 
@@ -391,7 +401,7 @@ describe('generate', () => {
   it('devcontainer.json has remoteEnv to block VS Code git credential forwarding', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_MAIN, '');
     assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_NODE, '');
     assert.equal(json.remoteEnv.VSCODE_GIT_ASKPASS_EXTRA_ARGS, '');
@@ -402,14 +412,14 @@ describe('generate', () => {
   it('devcontainer.json disables git.terminalAuthentication', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.customizations.vscode.settings['git.terminalAuthentication'], false);
   });
 
   it('devcontainer.json sets gitCredentialHelperConfigLocation to none', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = JSON.parse(content);
+    const json = parseJsonc(content);
     assert.equal(json.customizations.vscode.settings['dev.containers.gitCredentialHelperConfigLocation'], 'none');
   });
 
@@ -561,6 +571,66 @@ describe('generate', () => {
     generate(opts({ sshPort: 3333 }));
     const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
     assert.ok(content.includes('3333'));
+  });
+
+  it('README.md lists the devcontainer repo among workspace repositories', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('testproject-devcontainer'));
+    assert.ok(content.includes('/workspace/testproject'));
+  });
+
+  // --- Multi-root workspace ---
+
+  it('generates a <name>.code-workspace file', () => {
+    generate(opts());
+    assert.ok(existsSync(join(outputDir, 'testproject.code-workspace')));
+  });
+
+  it('code-workspace is named after the project', () => {
+    generate(opts({ name: 'mvz' }));
+    assert.ok(existsSync(join(outputDir, 'mvz.code-workspace')));
+    assert.ok(!existsSync(join(outputDir, 'testproject.code-workspace')));
+  });
+
+  it('code-workspace lists both repos as folders', () => {
+    generate(opts());
+    const json = JSON.parse(readFileSync(join(outputDir, 'testproject.code-workspace'), 'utf-8'));
+    const paths = json.folders.map((f) => f.path);
+    assert.deepEqual(paths, ['testproject', 'testproject-devcontainer']);
+  });
+
+  it('code-workspace enables automatic tasks', () => {
+    generate(opts());
+    const json = JSON.parse(readFileSync(join(outputDir, 'testproject.code-workspace'), 'utf-8'));
+    assert.equal(json.settings['task.allowAutomaticTasks'], 'on');
+  });
+
+  it('code-workspace has a folderOpen tmux auto-attach task', () => {
+    generate(opts());
+    const json = JSON.parse(readFileSync(join(outputDir, 'testproject.code-workspace'), 'utf-8'));
+    const task = json.tasks.tasks[0];
+    assert.equal(task.runOptions.runOn, 'folderOpen');
+    assert.ok(task.command.includes('tmux attach -t claude'));
+    assert.ok(task.command.includes('claude --dangerously-skip-permissions'));
+  });
+
+  it('docker-compose mounts the customer repo under /workspace/<name>', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('../../testproject:/workspace/testproject:cached'));
+  });
+
+  it('docker-compose mounts the devcontainer repo into the workspace', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('../../testproject-devcontainer:/workspace/testproject-devcontainer:cached'));
+  });
+
+  it('docker-compose mounts the code-workspace file at /workspace root', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('testproject.code-workspace:/workspace/testproject.code-workspace:cached'));
   });
 });
 

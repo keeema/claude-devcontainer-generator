@@ -18,6 +18,38 @@ se nedostane žádný `.devcontainer/` ani `.claude/`.
 <%_ } _%>
 <%_ } _%>
 - **Síť:** <%= fullInternet ? 'plný přístup k internetu (bez firewallu)' : 'firewall s default-deny politikou (whitelist domén)' %>
+<%_ if (Object.keys(services).length) { _%>
+
+## Přístup ke službám
+
+Služby se zpřístupňují **dvěma cestami**; model je stejný lokálně i na remote dev
+serveru, liší se jen `<host>`:
+
+1. **docker-compose publish → `<host>:<port>`** — `<host>` je stroj, kde běží
+   Docker (`localhost` lokálně, hostname dev serveru remote). Vždy dostupné.
+2. **VS Code `forwardPorts` → `localhost:<port>`** — služby jsou v
+   `devcontainer.json` nastavené formou `"service:port"` (běží jako samostatné
+   compose kontejnery, holé číslo by tunelovalo localhost devcontaineru, kde
+   neposlouchají). Díky tomu jdou i přes `localhost` bez ohledu na to, kde běží
+   Docker — užitečné hlavně pro frontend s OIDC redirect URI (stabilní
+   `localhost` se nemusí registrovat na hostname stroje).
+
+| Služba | `localhost` (forward) | `<host>` (publish) |
+|--------|-----------------------|--------------------|
+<%_ for (const svc of Object.values(services)) { _%>
+<%_ for (const portMapping of (svc.ports || [])) { _%>
+<%_ const _p = String(portMapping).split(':'); const _hostPort = _p[0]; const _containerPort = _p.length > 1 ? _p[1] : _p[0]; _%>
+| <%= svc.display_name %> | `localhost:<%= _containerPort %>` | `<host>:<%= _hostPort %>` |
+<%_ } _%>
+<%_ } _%>
+
+Proces, který si pustíš **uvnitř** devcontaineru (dev server frontendu/backendu),
+přidej do `forwardPorts` **holým číslem** (forwarduje localhost devcontaineru).
+
+> ⚠️ Při více devcontainerech vedle sebe kolidují host porty — remapuj publikaci
+> v `docker-compose.yml` (a případně forwardy v `devcontainer.json`), ať se
+> nepřekrývají.
+<%_ } _%>
 
 ## Předpoklady
 
@@ -32,16 +64,35 @@ zákaznické repo jako **sourozenecký** adresář vedle tohoto repa:
 
 ```
 <rodičovský-adresář>/
-  ├── <toto-repo>/      ← devcontainer (spouští se odtud)
-  └── <%= name %>/      ← zákaznické repo (naklonuje se sem, mount → /workspace)
+  ├── <%= name %>-devcontainer/   ← toto repo (devcontainer, spouští se odtud)
+  └── <%= name %>/                ← zákaznické repo (naklonuje se sem)
 ```
+
+Uvnitř kontejneru jsou **obě repa** namountovaná jako sourozenci pod
+`/workspace` a otevírají se společně přes multi-root workspace
+`<%= name %>.code-workspace`:
+
+```
+/workspace/
+  ├── <%= name %>/                ← zákaznické repo (zdrojový kód)
+  ├── <%= name %>-devcontainer/   ← toto repo (devcontainer)
+  └── <%= name %>.code-workspace  ← VS Code multi-root workspace
+```
+
+Repozitáře ve workspace:
+
+| Repozitář | Role |
+|-----------|------|
+| `<%= name %>` | zákaznický zdrojový kód (`<%= repo %>`) |
+| `<%= name %>-devcontainer` | toto repo — devcontainer / dev prostředí |
 
 ## První spuštění
 
-1. Otevři tento adresář ve VS Code:
+1. Otevři **workspace soubor** ve VS Code (ne adresář — workspace mountuje
+   obě repa a zapíná auto-attach task):
 
    ```bash
-   code .
+   code <%= name %>.code-workspace
    ```
 
 2. **"Reopen in Container"** (Command Palette → `Dev Containers: Reopen in Container`).
@@ -50,10 +101,16 @@ zákaznické repo jako **sourozenecký** adresář vedle tohoto repa:
    - naklonuje `<%= repo %>` (branch `<%= branch %>`) vedle tohoto repa
    - vytvoří Docker volumes (`claude-shared`, `<%= name %>-git-credentials`, …)
    - postaví image a nastartuje kontejner; Claude Code se spustí v tmux
+   - po otevření workspace naskočí terminál připojený k Claude (viz níže)
 
 ## Claude Code (tmux)
 
-Claude běží automaticky v tmux session `claude`:
+Claude běží automaticky v tmux session `claude`. Po otevření workspace
+(`<%= name %>.code-workspace`) se díky tasku **„Claude (tmux)"**
+(`runOn: folderOpen`, `task.allowAutomaticTasks: on`) **sám otevře
+terminál připojený k té session** — nemusíš nic spouštět ručně.
+
+Ruční ovládání (z dalšího terminálu nebo z jiného stroje):
 
 ```bash
 tmux attach -t claude     # připojení
@@ -110,9 +167,16 @@ Kontejner exposuje SSH na portu **<%= sshPort %>** (mapováno z kontejneru `:22`
 
 ## Projektová Claude konfigurace
 
-Soubory v `.project-claude/` se mountují do `/workspace/.claude` — sem patří
-`CLAUDE.md` a projektová nastavení. Tyto soubory **commituj do tohoto repa**.
+Soubory v `.project-claude/` se mountují do `/workspace/<%= name %>/.claude` — sem
+patří `CLAUDE.md` a projektová nastavení. Tyto soubory **commituj do tohoto repa**.
 `.claude/` je automaticky přidán do git exclude zákaznického repa.
+
+Protože je `<%= name %>-devcontainer` namountované přímo ve workspace
+(`/workspace/<%= name %>-devcontainer`) a je i folderem v
+`<%= name %>.code-workspace`, můžeš `.project-claude/` (i ostatní soubory
+tohoto repa) **editovat a commitovat přímo zevnitř kontejneru** — beze změny
+mount logiky. Úprava se díky bind mountu okamžitě projeví i v
+`/workspace/<%= name %>/.claude`.
 <%_ } _%>
 
 ## Persistentní data (Docker volumes)
@@ -125,7 +189,8 @@ Soubory v `.project-claude/` se mountují do `/workspace/.claude` — sem patř�
 <%_ for (const volName of Object.keys(serviceVolumes)) { _%>
 | `<%= volName %>` | (data služby) | persistentní data služby | tento projekt |
 <%_ } _%>
-| bind mount | `/workspace` | zdrojový kód `<%= name %>` | — |
+| bind mount | `/workspace/<%= name %>` | zdrojový kód `<%= name %>` | — |
+| bind mount | `/workspace/<%= name %>-devcontainer` | toto devcontainer repo (editovatelné zevnitř) | — |
 
 Všechny volumes přežijí rebuild kontejneru. `claude-shared` a
 `<%= name %>-git-credentials` jsou `external: true` a vytvoří je `init.sh`,

@@ -71,6 +71,7 @@ export function generate(options) {
   const files = [
     { template: 'README.md.ejs', output: join(output, 'README.md') },
     { template: 'project.yml.ejs', output: join(output, 'project.yml') },
+    { template: 'workspace.code-workspace.ejs', output: join(output, `${name}.code-workspace`) },
     { template: 'init.sh.ejs', output: join(devcontainerDir, 'init.sh'), executable: true },
     ...(!fullInternet ? [{ template: 'init-firewall.sh.ejs', output: join(devcontainerDir, 'init-firewall.sh'), executable: true }] : []),
     { template: 'Dockerfile.ejs', output: join(devcontainerDir, 'Dockerfile') },
@@ -110,12 +111,14 @@ Kompletní návod je ve vygenerovaném ${output}/README.md.
 1. Vytvořte sdílený Docker volume (jednou za stroj):
    docker volume create claude-shared
 
-2. Otevřete devcontainer ve VS Code:
+2. Otevřete workspace ve VS Code (ne adresář — workspace soubor mountuje
+   obě repa a zapíná auto-attach task):
    cd ${output}
-   code .
+   code ${name}.code-workspace
    → "Reopen in Container"
 
-3. Připojení ke Claude Code:
+3. Po otevření workspace se Claude Code připojí sám (task "Claude (tmux)",
+   runOn: folderOpen). Ruční připojení z dalšího terminálu:
    tmux attach -t claude
 
 4. Odpojení (Claude dál pracuje):

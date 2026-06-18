@@ -24,9 +24,28 @@ CLI nástroj v Node.js, který generuje kompletní devcontainer repozitáře pro
   │   ├── Dockerfile
   │   ├── init-firewall.sh       ← iptables pravidla, whitelist domén
   │   └── init.sh                ← naklonuje zákaznické repo pokud neexistuje
+  ├── <nazev>.code-workspace     ← VS Code multi-root workspace (obě repa + auto-attach task)
   ├── README.md                  ← návod pro vývojáře (project-specific)
   └── project.yml                ← konfigurace projektu (repo URL, branch, cesty)
 ```
+
+### Multi-root workspace
+
+Uvnitř kontejneru jsou pod `/workspace` namountovaná **dvě** repa jako
+sourozenci a otevírají se společně přes `<nazev>.code-workspace`:
+
+```
+/workspace/
+  ├── <nazev>/                ← zákaznické repo (zdrojový kód)
+  ├── <nazev>-devcontainer/   ← devcontainer repo (editovatelné/commitovatelné zevnitř)
+  └── <nazev>.code-workspace  ← multi-root workspace soubor
+```
+
+Devcontainer repo je namountované do workspace záměrně — projektový Claude
+kontext (`.project-claude/`) i ostatní soubory devcontaineru jdou pak editovat
+a commitovat přímo zevnitř kontejneru. Vývojář otevírá **workspace soubor**
+(`code <nazev>.code-workspace`), ne adresář — workspace soubor mountuje obě
+repa a zapíná auto-attach task (viz tmux níže).
 
 Po vygenerování CLI vypíše stručné instrukce a ukáže na vygenerovaný `README.md`, který obsahuje kompletní project-specific návod (jak spustit kontejner, tmux, git PAT, JetBrains, volumes).
 
@@ -117,9 +136,11 @@ services:
       context: .devcontainer
       dockerfile: Dockerfile
     volumes:
-      - ../mujprojekt:/workspace:cached # zdrojový kód (sourozenec vedle)
+      - ../../mujprojekt:/workspace/mujprojekt:cached # zdrojový kód (sourozenec vedle)
+      - ../../mujprojekt-devcontainer:/workspace/mujprojekt-devcontainer:cached # devcontainer repo (editovatelné zevnitř)
+      - ../../mujprojekt-devcontainer/mujprojekt.code-workspace:/workspace/mujprojekt.code-workspace:cached # workspace soubor v rootu /workspace
       - claude-credentials:/home/node/.claude # globální Claude (sdílený)
-      - <nazev>-claude-project:/workspace/.claude # projektový Claude config
+      - <nazev>-claude-project:/workspace/mujprojekt/.claude # projektový Claude config
       - <nazev>-commandhistory:/commandhistory # bash/zsh historie (per-projekt)
     command: >
       bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
@@ -150,9 +171,9 @@ include:
 
 1. **`claude-credentials`** — globální Docker volume, mountovaný na `/home/node/.claude`. OAuth tokeny, globální nastavení. Sdílený across všemi projekty na stroji. Označen `external: true`, uživatel ho vytvoří jednou (`docker volume create claude-credentials`).
 
-2. **`<nazev>-claude-project`** — per-projekt Docker volume, mountovaný na `/workspace/.claude`. Obsahuje `CLAUDE.md` (Claude Code ho najde jako `.claude/CLAUDE.md` — oficiálně podporované umístění), projektová nastavení a settings. Persistentní přes rebuildy kontejneru. Zákaznické repo žádný `.claude/` adresář nemá — volume ho překryje, takže není potřeba `.gitignore`.
+2. **`<nazev>-claude-project`** — per-projekt Docker volume, mountovaný na `/workspace/<nazev>/.claude`. Obsahuje `CLAUDE.md` (Claude Code ho najde jako `.claude/CLAUDE.md` — oficiálně podporované umístění), projektová nastavení a settings. Persistentní přes rebuildy kontejneru. Zákaznické repo žádný `.claude/` adresář nemá — volume ho překryje, takže není potřeba `.gitignore`.
 
-3. **Zdrojový kód** — bind mount zákaznického repa z disku do `/workspace`.
+3. **Zdrojový kód** — bind mount zákaznického repa z disku do `/workspace/<nazev>`. Vedle něj je do `/workspace/<nazev>-devcontainer` namountované i samotné devcontainer repo (aby šel projektový Claude kontext editovat a commitovat zevnitř kontejneru).
 
 4. **`<nazev>-commandhistory`** — per-projekt bash/zsh historie, přežije rebuild kontejneru.
 
@@ -172,7 +193,39 @@ Ale NEMŮŽE:
 
 ### tmux — vzdálené ovládání Claude Code
 
-Klíčový požadavek: Claude Code se automaticky spustí v tmux session při startu kontejneru. Vývojář se jen připojí.
+Klíčový požadavek: Claude Code se automaticky spustí v tmux session při startu kontejneru. Vývojář se jen připojí — a i to připojení je automatické.
+
+#### Auto-attach po otevření workspace
+
+Šablona `<nazev>.code-workspace` obsahuje VS Code task, který se spustí sám po
+otevření workspace (`runOn: folderOpen` + `task.allowAutomaticTasks: on` v
+settings). Task se připojí ke sdílené tmux session `claude` (a vytvoří ji,
+pokud neběží):
+
+```json
+"settings": {
+  "task.allowAutomaticTasks": "on"
+},
+"tasks": {
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Claude (tmux)",
+      "type": "shell",
+      "command": "tmux attach -t claude 2>/dev/null || tmux new-session -s claude -c /workspace 'claude --dangerously-skip-permissions'",
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true, "showReuseMessage": false },
+      "runOptions": { "runOn": "folderOpen" },
+      "problemMatcher": []
+    }
+  ]
+}
+```
+
+Task je plně generický — session `claude`, cwd `/workspace`, příkaz
+`claude --dangerously-skip-permissions` a `task.allowAutomaticTasks: on` jsou
+konstanty stejné napříč všemi kontejnery (neparametrizují se). Název session
+v tasku **musí** sedět na session, kterou vytváří `command:` v
+`docker-compose.yml` (`tmux new-session -d -s claude '...'`).
 
 V `docker-compose.yml` je `command` nastavený tak, že kontejner při startu:
 
@@ -295,6 +348,7 @@ devcontainer-generator/
   │       │   ├── init-firewall.sh.ejs
   │       │   ├── init.sh.ejs
   │       │   ├── README.md.ejs
+  │       │   ├── workspace.code-workspace.ejs
   │       │   └── project.yml.ejs
   │       ├── stacks/             ← SDK/runtime definice
   │       │   ├── nodejs.yml

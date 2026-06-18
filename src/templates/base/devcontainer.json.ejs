@@ -18,17 +18,26 @@ if (stack.vscode_extensions) {
   extensions.push(...stack.vscode_extensions);
 }
 
-// Build forwardPorts and portsAttributes
-const forwardPorts = [sshPort];
+// Build forwardPorts and portsAttributes.
+//
+// Služby běží jako SAMOSTATNÉ compose kontejnery, takže se forwardují formou
+// "service:containerPort" — holé číslo by tunelovalo localhost devcontaineru,
+// kde tyto služby neposlouchají (viz containers.dev json_reference). Klíč v
+// portsAttributes musí přesně odpovídat zápisu ve forwardPorts.
+//
+// SSH (sshd uvnitř na :22) se neforwarduje — je dostupné přes <host>:<sshPort>
+// z docker-compose publish (host = localhost lokálně / hostname dev serveru).
+const forwardPorts = [];
 const portsAttributes = {};
-portsAttributes[String(sshPort)] = { label: "SSH", onAutoForward: "silent" };
 
 for (const [svcName, svc] of Object.entries(services)) {
   if (!svc.ports) continue;
   for (const portMapping of svc.ports) {
-    const hostPort = parseInt(portMapping.split(':')[0], 10);
-    forwardPorts.push(hostPort);
-    portsAttributes[String(hostPort)] = { label: svc.display_name, onAutoForward: "silent" };
+    const parts = String(portMapping).split(':');
+    const containerPort = parts.length > 1 ? parts[1] : parts[0];
+    const key = `${svcName}:${containerPort}`;
+    forwardPorts.push(key);
+    portsAttributes[key] = { label: svc.display_name, onAutoForward: "silent" };
   }
 }
 -%>
@@ -51,6 +60,13 @@ for (const [svcName, svc] of Object.entries(services)) {
     }
   },
 
+  // forwardPorts = zpřístupnění portů na localhost lokálního stroje. Služby jsou
+  // samostatné compose kontejnery → forma "service:port" (lokálně se navážou na
+  // číslo za dvojtečkou). Vždy jsou navíc dostupné přes docker-compose publish na
+  // <host>:<port>. Proces běžící UVNITŘ devcontaineru (dev server frontendu/
+  // backendu) forwarduj holým číslem — užitečné pro stabilní OIDC redirect URI na
+  // localhost, např.: "forwardPorts": [5173, <%- forwardPorts.length ? JSON.stringify(forwardPorts[0]) : '"postgres:5432"' %>].
+  // SSH: připoj se přes <host>:<%= sshPort %>.
   "forwardPorts": <%- JSON.stringify(forwardPorts) %>,
 
   "portsAttributes": <%- JSON.stringify(portsAttributes, null, 2).replace(/\n/g, '\n  ') %>,
