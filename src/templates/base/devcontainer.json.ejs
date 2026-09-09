@@ -4,14 +4,14 @@ const baseExtensions = [
   "esbenp.prettier-vscode",
   "dbaeumer.vscode-eslint",
   "biomejs.biome",
-  "eamodio.gitlens",
   "redhat.vscode-yaml",
   "streetsidesoftware.code-spell-checker",
   "streetsidesoftware.code-spell-checker-czech",
   "hashicorp.terraform",
+  "github.vscode-github-actions",
   "styled-components.vscode-styled-components",
-  "bierner.markdown-mermaid",
   "mhutchie.git-graph",
+  "donjayamanne.githistory",
 ];
 const extensions = [...baseExtensions];
 if (stack.vscode_extensions) {
@@ -89,7 +89,12 @@ for (const [svcName, svc] of Object.entries(services)) {
     "GIT_ASKPASS": ""
   },
 
-  "initializeCommand": ".devcontainer/init.sh"<% if (!fullInternet) { %>,
+  // Cross-platform dispatch: cmd.exe (Windows) spustí init.cmd; pod /bin/sh se
+  // backslash slije do neexistujícího tokenu, první příkaz selže a Mac/Linux
+  // propadne na wrapper init. Uvozovky tu nesmí být — VS Code je escapuje, když
+  // spouští cmd.exe. Na macOS proto v logu vždy nejdřív probleskne
+  // "sh: .devcontainerinit.cmd: command not found" — je to očekávané.
+  "initializeCommand": ".devcontainer\\init.cmd || .devcontainer/init"<% if (!fullInternet) { %>,
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"<% } %>
 }

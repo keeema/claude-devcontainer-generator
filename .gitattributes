@@ -1,0 +1,14 @@
+# Konce řádků v tomto repu. Šablony v src/templates/ se kopírují do generovaného
+# devcontaineru prakticky doslova — kdyby se sem repo naklonovalo na Windows
+# s core.autocrlf=true, zdědil by CRLF i generovaný Dockerfile a init.sh
+# (a tím rozbil heredoc bloky interpretované v Linuxu). Proto LF natvrdo.
+
+* text=auto
+
+*.ejs           text eol=lf
+*.sh            text eol=lf
+*.js            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf

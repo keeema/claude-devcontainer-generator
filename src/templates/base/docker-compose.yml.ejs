@@ -17,6 +17,8 @@ services:
       - claude-shared:/home/node/.claude
       - <%= name %>-git-credentials:/home/node/.gitcreds
 <%_ if (localClaude) { _%>
+      # Claude běží s cwd /workspace → workspace-level kontext musí být zde.
+      - ../../<%= name %>-devcontainer/.workspace-claude:/workspace/.claude:cached
       - ../../<%= name %>-devcontainer/.project-claude:/workspace/<%= name %>/.claude:cached
 <%_ } _%>
       - <%= name %>-commandhistory:/commandhistory

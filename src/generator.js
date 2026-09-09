@@ -65,14 +65,23 @@ export function generate(options) {
 
   if (localClaude) {
     mkdirSync(join(output, '.project-claude'), { recursive: true });
+    mkdirSync(join(output, '.workspace-claude'), { recursive: true });
   }
 
   // Render všech šablon
   const files = [
     { template: 'README.md.ejs', output: join(output, 'README.md') },
+    { template: 'gitattributes.ejs', output: join(output, '.gitattributes') },
     { template: 'project.yml.ejs', output: join(output, 'project.yml') },
     { template: 'workspace.code-workspace.ejs', output: join(output, `${name}.code-workspace`) },
+    ...(localClaude ? [
+      { template: 'workspace-claude.md.ejs', output: join(output, '.workspace-claude', 'CLAUDE.md') },
+      { template: 'project-claude.md.ejs', output: join(output, '.project-claude', 'CLAUDE.md') },
+    ] : []),
     { template: 'init.sh.ejs', output: join(devcontainerDir, 'init.sh'), executable: true },
+    // Cross-platform wrappery pro initializeCommand (viz devcontainer.json.ejs).
+    { template: 'init.ejs', output: join(devcontainerDir, 'init'), executable: true },
+    { template: 'init.cmd.ejs', output: join(devcontainerDir, 'init.cmd'), crlf: true },
     ...(!fullInternet ? [{ template: 'init-firewall.sh.ejs', output: join(devcontainerDir, 'init-firewall.sh'), executable: true }] : []),
     { template: 'Dockerfile.ejs', output: join(devcontainerDir, 'Dockerfile') },
     { template: 'docker-compose.yml.ejs', output: join(devcontainerDir, 'docker-compose.yml') },
@@ -81,7 +90,9 @@ export function generate(options) {
 
   for (const file of files) {
     const content = renderTemplate(file.template, context);
-    writeFileSync(file.output, content);
+    // Node writeFileSync konce řádků nepřevádí — batch soubory musí být CRLF
+    // už po vygenerování, ne až po prvním checkoutu podle .gitattributes.
+    writeFileSync(file.output, file.crlf ? content.replace(/\r?\n/g, '\r\n') : content);
     if (file.executable) {
       chmodSync(file.output, 0o755);
     }
@@ -95,9 +106,12 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
   let claudeInfo = '';
   if (localClaude) {
     claudeInfo = `
-6. Projektové Claude nastavení (.claude/CLAUDE.md) jsou v .project-claude/
-   složce tohoto devcontainer repa — commitujte je do gitu.
-   .claude/ je automaticky přidán do git exclude zákaznického repa.
+6. Claude kontext je ve dvou složkách tohoto devcontainer repa (commitujte je):
+   .workspace-claude/CLAUDE.md → /workspace/.claude/CLAUDE.md (rozcestník,
+     Claude Code běží s cwd /workspace, takže ho čte první)
+   .project-claude/CLAUDE.md   → /workspace/${name}/.claude/CLAUDE.md (pravidla projektu)
+   Oba jsou předvyplněné skeletonem. .claude/ je automaticky přidán do git
+   exclude zákaznického repa.
 `;
   }
 

@@ -23,8 +23,13 @@ CLI nástroj v Node.js, který generuje kompletní devcontainer repozitáře pro
   │   ├── docker-compose.yml
   │   ├── Dockerfile
   │   ├── init-firewall.sh       ← iptables pravidla, whitelist domén
-  │   └── init.sh                ← naklonuje zákaznické repo pokud neexistuje
+  │   ├── init.sh                ← naklonuje zákaznické repo pokud neexistuje
+  │   ├── init                   ← Mac/Linux wrapper nad init.sh (bez přípony, exec bit)
+  │   └── init.cmd               ← Windows wrapper — spustí init.sh přes Git Bash (CRLF)
+  ├── .workspace-claude/         ← jen s --local-claude: kontext do /workspace/.claude
+  ├── .project-claude/           ← jen s --local-claude: kontext do /workspace/<nazev>/.claude
   ├── <nazev>.code-workspace     ← VS Code multi-root workspace (obě repa + auto-attach task)
+  ├── .gitattributes             ← konce řádků (LF pro skripty, CRLF pro .cmd)
   ├── README.md                  ← návod pro vývojáře (project-specific)
   └── project.yml                ← konfigurace projektu (repo URL, branch, cesty)
 ```
@@ -117,7 +122,7 @@ S `--full-internet`: firewall se přeskočí, žádné `NET_ADMIN`/`NET_RAW`, ž
     "GIT_ASKPASS": ""
   },
 
-  "initializeCommand": ".devcontainer/init.sh",
+  "initializeCommand": ".devcontainer\\init.cmd || .devcontainer/init",
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }
@@ -140,7 +145,8 @@ services:
       - ../../mujprojekt-devcontainer:/workspace/mujprojekt-devcontainer:cached # devcontainer repo (editovatelné zevnitř)
       - ../../mujprojekt-devcontainer/mujprojekt.code-workspace:/workspace/mujprojekt.code-workspace:cached # workspace soubor v rootu /workspace
       - claude-credentials:/home/node/.claude # globální Claude (sdílený)
-      - <nazev>-claude-project:/workspace/mujprojekt/.claude # projektový Claude config
+      - ../../mujprojekt-devcontainer/.workspace-claude:/workspace/.claude # workspace kontext (cwd Claude Code)
+      - ../../mujprojekt-devcontainer/.project-claude:/workspace/mujprojekt/.claude # projektový Claude kontext
       - <nazev>-commandhistory:/commandhistory # bash/zsh historie (per-projekt)
     command: >
       bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
@@ -156,7 +162,6 @@ services:
 volumes:
   claude-credentials:
     external: true # sdílený across projekty, vytvořen jednou
-  <nazev>-claude-project: # per-projekt, vytvořen automaticky
   <nazev>-commandhistory: # per-projekt, historie příkazů přežije rebuild
 ```
 
@@ -167,11 +172,19 @@ include:
   - path: ../mujprojekt/docker-compose.yml
 ```
 
-### Tři vrstvy persistentních dat
+### Vrstvy persistentních dat
 
 1. **`claude-credentials`** — globální Docker volume, mountovaný na `/home/node/.claude`. OAuth tokeny, globální nastavení. Sdílený across všemi projekty na stroji. Označen `external: true`, uživatel ho vytvoří jednou (`docker volume create claude-credentials`).
 
-2. **`<nazev>-claude-project`** — per-projekt Docker volume, mountovaný na `/workspace/<nazev>/.claude`. Obsahuje `CLAUDE.md` (Claude Code ho najde jako `.claude/CLAUDE.md` — oficiálně podporované umístění), projektová nastavení a settings. Persistentní přes rebuildy kontejneru. Zákaznické repo žádný `.claude/` adresář nemá — volume ho překryje, takže není potřeba `.gitignore`.
+2. **Claude kontext (`--local-claude`)** — bind-mounty z devcontainer repa, ne Docker volume:
+   - `.workspace-claude/` → `/workspace/.claude` — workspace-level rozcestník. Claude Code
+     běží s cwd `/workspace`, takže tenhle soubor čte jako první; generuje se s odkazem
+     na projektový kontext, aby řetěz `workspace → projekt` držel.
+   - `.project-claude/` → `/workspace/<nazev>/.claude` — projektová pravidla (Claude Code
+     je najde jako `.claude/CLAUDE.md`, oficiálně podporované umístění).
+
+   Obojí je verzované v devcontainer repu a commituje se odtud. V zákaznickém repu je
+   `.claude/` v `.git/info/exclude` (přidá `init.sh`), takže se do zákazníkova repa nedostane.
 
 3. **Zdrojový kód** — bind mount zákaznického repa z disku do `/workspace/<nazev>`. Vedle něj je do `/workspace/<nazev>-devcontainer` namountované i samotné devcontainer repo (aby šel projektový Claude kontext editovat a commitovat zevnitř kontejneru).
 
@@ -264,7 +277,16 @@ Typický workflow:
 
 ### init.sh — automatický clone
 
-`initializeCommand` spustí `init.sh` na hostu před startem kontejneru. Skript přečte `project.yml` a naklonuje repo jako sourozenecký adresář vedle devcontainer repa (pokud ještě neexistuje).
+`initializeCommand` je řetěz `.devcontainer\init.cmd || .devcontainer/init`, který
+rozhoduje podle platformy: na Windows spustí cmd.exe `init.cmd` (ten najde Git Bash
+v `ProgramFiles`/`LocalAppData` a pustí přes něj `init.sh`), pod `/bin/sh` se backslash
+slije do neexistujícího tokenu, první příkaz selže a Mac/Linux propadne na wrapper
+`init`. Uvozovky v tom řetězu být nesmí — VS Code je escapuje při spouštění cmd.exe.
+Veškerá logika zůstává v `init.sh`, wrappery jsou jen launchery. Na macOS proto
+v Dev Containers logu vždy nejdřív probleskne `sh: .devcontainerinit.cmd: command not found`
+— je to očekávané, ne chyba.
+
+`init.sh` se pak spustí na hostu před startem kontejneru. Skript přečte `project.yml` a naklonuje repo jako sourozenecký adresář vedle devcontainer repa (pokud ještě neexistuje).
 
 ```yaml
 # project.yml
@@ -328,7 +350,7 @@ Dostupné služby: `postgres`, `mongo`, `redis`, `azurite`.
 
 - **Node.js** — runtime
 - **Commander** — parsování CLI argumentů
-- **EJS** — šablonování souborů (devcontainer.json, Dockerfile, docker-compose.yml, init.sh, init-firewall.sh)
+- **EJS** — šablonování souborů (devcontainer.json, Dockerfile, docker-compose.yml, init.sh, init-firewall.sh, init, init.cmd, .gitattributes, CLAUDE.md)
 - **js-yaml** — čtení stack definic a project.yml
 - **Žádné další závislosti** — držet minimální
 
@@ -347,8 +369,13 @@ devcontainer-generator/
   │       │   ├── Dockerfile.ejs
   │       │   ├── init-firewall.sh.ejs
   │       │   ├── init.sh.ejs
+  │       │   ├── init.ejs                ← Mac/Linux wrapper
+  │       │   ├── init.cmd.ejs            ← Windows wrapper (zapisuje se s CRLF)
+  │       │   ├── gitattributes.ejs
   │       │   ├── README.md.ejs
   │       │   ├── workspace.code-workspace.ejs
+  │       │   ├── workspace-claude.md.ejs ← /workspace/.claude/CLAUDE.md
+  │       │   ├── project-claude.md.ejs   ← /workspace/<nazev>/.claude/CLAUDE.md
   │       │   └── project.yml.ejs
   │       ├── stacks/             ← SDK/runtime definice
   │       │   ├── nodejs.yml
@@ -422,7 +449,7 @@ Tento projekt sám používá devcontainer (meta!). Jednoduchý setup:
 - [x] Volitelný firewall (`--full-internet`)
 - [x] Oddělené stacky (nodejs, python, dotnet) a služby (postgres, mongo, redis, azurite)
 - [x] Výpis instrukcí po vygenerování
-- [x] Testy (37 testů)
+- [x] Testy (101 testů)
 - [x] Dokumentace (README.md)
 - [ ] Interaktivní režim (inquirer nebo prompts)
 - [ ] Validace vstupů (repo URL format, existence stacku)

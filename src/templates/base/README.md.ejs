@@ -56,6 +56,8 @@ přidej do `forwardPorts` **holým číslem** (forwarduje localhost devcontainer
 - Docker Desktop nebo Docker Engine
 - VS Code s rozšířením **Dev Containers** (nebo JetBrains Gateway přes SSH)
 - Přístup k `<%= repo %>` (SSH klíč nebo PAT)
+- **Windows navíc:** [Git for Windows](https://gitforwindows.org/) — `init.cmd`
+  přes něj spouští `init.sh` (viz [Windows](#windows) níže)
 
 ## Struktura na disku
 
@@ -165,18 +167,27 @@ Kontejner exposuje SSH na portu **<%= sshPort %>** (mapováno z kontejneru `:22`
 - Backend běží uvnitř kontejneru, otevři `/workspace`
 <%_ if (localClaude) { _%>
 
-## Projektová Claude konfigurace
+## Claude kontext
 
-Soubory v `.project-claude/` se mountují do `/workspace/<%= name %>/.claude` — sem
-patří `CLAUDE.md` a projektová nastavení. Tyto soubory **commituj do tohoto repa**.
-`.claude/` je automaticky přidán do git exclude zákaznického repa.
+Dva bind-mountované kontexty, oba verzované v tomto repu:
+
+| Zdroj zde | Mount v kontejneru | K čemu |
+|---|---|---|
+| `.workspace-claude/` | `/workspace/.claude` | Workspace rozcestník — Claude Code běží s cwd `/workspace`, takže tohle čte první |
+| `.project-claude/` | `/workspace/<%= name %>/.claude` | Projektová pravidla pro `<%= name %>` |
+
+Oba soubory jsou předvyplněné skeletonem; workspace verze odkazuje na projektovou,
+takže řetěz `workspace → projekt` drží. **Projektová pravidla piš do
+`.project-claude/CLAUDE.md`**, do workspace verze jen to, co platí napříč workspace.
+
+Tyto soubory **commituj do tohoto repa** — `.claude/` je automaticky přidán do git
+exclude zákaznického repa, takže se do něj nedostanou.
 
 Protože je `<%= name %>-devcontainer` namountované přímo ve workspace
 (`/workspace/<%= name %>-devcontainer`) a je i folderem v
-`<%= name %>.code-workspace`, můžeš `.project-claude/` (i ostatní soubory
-tohoto repa) **editovat a commitovat přímo zevnitř kontejneru** — beze změny
-mount logiky. Úprava se díky bind mountu okamžitě projeví i v
-`/workspace/<%= name %>/.claude`.
+`<%= name %>.code-workspace`, můžeš je (i ostatní soubory tohoto repa) **editovat
+a commitovat přímo zevnitř kontejneru** — beze změny mount logiky. Úprava se díky
+bind mountu okamžitě projeví na obou cestách.
 <%_ } _%>
 
 ## Persistentní data (Docker volumes)
@@ -191,10 +202,34 @@ mount logiky. Úprava se díky bind mountu okamžitě projeví i v
 <%_ } _%>
 | bind mount | `/workspace/<%= name %>` | zdrojový kód `<%= name %>` | — |
 | bind mount | `/workspace/<%= name %>-devcontainer` | toto devcontainer repo (editovatelné zevnitř) | — |
+<%_ if (localClaude) { _%>
+| bind mount | `/workspace/.claude` + `/workspace/<%= name %>/.claude` | Claude kontext (verzovaný zde) | — |
+<%_ } _%>
 
 Všechny volumes přežijí rebuild kontejneru. `claude-shared` a
 `<%= name %>-git-credentials` jsou `external: true` a vytvoří je `init.sh`,
 pokud chybí.
+
+## Windows
+
+`initializeCommand` v `devcontainer.json` je řetěz
+`.devcontainer\init.cmd || .devcontainer/init`: na Windows ho spustí cmd.exe a padne
+na `init.cmd` (ten najde Git Bash a pustí přes něj `init.sh`), pod `/bin/sh` první
+token selže a Mac/Linux propadne na wrapper `init`. Veškerá logika je v `init.sh`.
+
+- **Git for Windows je povinný** — `init.cmd` ho hledá v `%ProgramFiles%\Git`
+  a `%LocalAppData%\Programs\Git`. Záměrně nesahá po holém `bash.exe` z PATH:
+  v System32 je WSL bash. Když chybí, uvidíš `Git for Windows not found` a hned
+  za tím druhou, matoucí chybu z fallbacku na `init` — řeš tu první.
+- **Konce řádků** hlídá `.gitattributes` (skripty LF, `*.cmd` CRLF). Bez toho by
+  CRLF rozbil heredoc v `Dockerfile`, který nastavuje `GH_TOKEN` pro `gh` CLI.
+- **Exec bit:** pokud v tomto repu na Windows přibude nový shell wrapper, git ho
+  uloží bez práva ke spuštění a na macOS pak `initializeCommand` selže. Náprava:
+  `git update-index --chmod=+x .devcontainer/init`.
+
+Na macOS/Linuxu se v Dev Containers logu vždy nejdřív objeví
+`sh: .devcontainerinit.cmd: command not found`. Je to očekávaná část dispatche,
+ne chyba.
 
 ## project.yml
 

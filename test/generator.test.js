@@ -130,8 +130,11 @@ describe('generate', () => {
     assert.ok(ext.includes('anthropic.claude-code'));
     assert.ok(ext.includes('dbaeumer.vscode-eslint'));
     assert.ok(ext.includes('esbenp.prettier-vscode'));
-    assert.ok(ext.includes('eamodio.gitlens'));
     assert.ok(ext.includes('streetsidesoftware.code-spell-checker'));
+    assert.ok(ext.includes('donjayamanne.githistory'));
+    assert.ok(ext.includes('github.vscode-github-actions'));
+    assert.ok(!ext.includes('eamodio.gitlens'), 'gitlens byl odebrán');
+    assert.ok(!ext.includes('bierner.markdown-mermaid'), 'markdown-mermaid byl odebrán');
   });
 
   it('nodejs stack has jest extension', () => {
@@ -557,14 +560,24 @@ describe('generate', () => {
     assert.ok(content.includes('pgdata'));
   });
 
-  it('README.md has project-Claude section only with localClaude', () => {
+  it('README.md has the Claude context section only with localClaude', () => {
     generate(opts());
     let content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
-    assert.ok(!content.includes('Projektová Claude konfigurace'));
+    assert.ok(!content.includes('## Claude kontext'));
     rmSync(join(outputDir, 'README.md'));
     generate(opts({ localClaude: true }));
     content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
-    assert.ok(content.includes('Projektová Claude konfigurace'));
+    assert.ok(content.includes('## Claude kontext'));
+    assert.ok(content.includes('.workspace-claude/'));
+    assert.ok(content.includes('.project-claude/'));
+  });
+
+  it('README.md documents the Windows prerequisites', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('## Windows'));
+    assert.ok(content.includes('gitforwindows.org'));
+    assert.ok(content.includes('git update-index --chmod=+x .devcontainer/init'));
   });
 
   it('README.md uses the custom SSH port', () => {
@@ -631,6 +644,73 @@ describe('generate', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
     assert.ok(content.includes('testproject.code-workspace:/workspace/testproject.code-workspace:cached'));
+  });
+
+  // --- Cross-platform (Windows) ---
+
+  it('generates .gitattributes pinning line endings', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.gitattributes'), 'utf-8');
+    assert.ok(content.includes('* text=auto'));
+    assert.ok(content.includes('*.sh            text eol=lf'));
+    assert.ok(content.includes('Dockerfile*     text eol=lf'));
+    assert.ok(content.includes('.devcontainer/init  text eol=lf'));
+    assert.ok(content.includes('*.cmd           text eol=crlf'));
+  });
+
+  it('init.cmd is written with CRLF line endings', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'init.cmd'), 'utf-8');
+    assert.ok(content.includes('\r\n'), 'init.cmd musí mít CRLF');
+    assert.ok(!/[^\r]\n/.test(content), 'init.cmd nesmí obsahovat osamocené LF');
+    assert.ok(content.includes('%~dp0init.sh'));
+  });
+
+  it('init wrapper is executable, LF-only and delegates to init.sh', () => {
+    generate(opts());
+    const initPath = join(outputDir, '.devcontainer', 'init');
+    const content = readFileSync(initPath, 'utf-8');
+    assert.ok(!content.includes('\r'), 'init musí mít LF');
+    assert.ok(content.includes('exec "$(dirname "$0")/init.sh"'));
+    // Na Windows je chmod no-op → exec bit se musí doplnit
+    // přes `git update-index --chmod=+x .devcontainer/init` (viz README).
+    assert.ok(statSync(initPath).mode & 0o100, 'init should be executable');
+  });
+
+  it('initializeCommand dispatches between Windows and POSIX wrappers', () => {
+    for (const extra of [{}, { fullInternet: true }]) {
+      rmSync(outputDir, { recursive: true, force: true });
+      generate(opts(extra));
+      const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+      // Raw podoba: v JSON zdroji musí být backslash zdvojený.
+      assert.ok(content.includes('.devcontainer\\\\init.cmd || .devcontainer/init'));
+      const json = parseJsonc(content);
+      assert.equal(json.initializeCommand, '.devcontainer\\init.cmd || .devcontainer/init');
+    }
+  });
+
+  // --- Workspace-level Claude kontext (--local-claude) ---
+
+  it('local-claude mounts workspace-level .claude at the container cwd', () => {
+    generate(opts({ localClaude: true }));
+    const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
+    assert.ok(content.includes('.workspace-claude:/workspace/.claude:cached'));
+    assert.ok(content.includes('.project-claude:/workspace/testproject/.claude:cached'));
+  });
+
+  it('local-claude seeds workspace CLAUDE.md pointing at the project one', () => {
+    generate(opts({ localClaude: true }));
+    const workspaceMd = readFileSync(join(outputDir, '.workspace-claude', 'CLAUDE.md'), 'utf-8');
+    // @ import (ne jen markdown odkaz) — projektový kontext se musí natáhnout
+    // do kontextu i při cwd /workspace.
+    assert.match(workspaceMd, /^@\.\.\/testproject\/\.claude\/CLAUDE\.md$/m);
+    assert.ok(existsSync(join(outputDir, '.project-claude', 'CLAUDE.md')));
+  });
+
+  it('no local Claude context without --local-claude', () => {
+    generate(opts());
+    assert.ok(!existsSync(join(outputDir, '.workspace-claude')));
+    assert.ok(!existsSync(join(outputDir, '.project-claude')));
   });
 });
 

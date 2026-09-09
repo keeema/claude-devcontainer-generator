@@ -82,23 +82,47 @@ Můžeš zavřít VS Code a Claude pracuje dál. Při dalším otevření se jen
   │   │   ├── docker-compose.yml   ← app + služby, volumes, networking
   │   │   ├── Dockerfile           ← base image, nástroje, Claude Code
   │   │   ├── init-firewall.sh     ← iptables whitelist (pokud není --full-internet)
-  │   │   └── init.sh              ← klonuje projektové repo, vytvoří volumes
+  │   │   ├── init.sh              ← klonuje projektové repo, vytvoří volumes
+  │   │   ├── init                 ← Mac/Linux wrapper nad init.sh
+  │   │   └── init.cmd             ← Windows wrapper (spustí init.sh přes Git Bash)
+  │   ├── .workspace-claude/       ← s --local-claude: kontext do /workspace/.claude
+  │   ├── .project-claude/         ← s --local-claude: kontext do /workspace/<nazev>/.claude
+  │   ├── .gitattributes           ← konce řádků (LF pro skripty, CRLF pro .cmd)
   │   ├── README.md                ← project-specific návod pro vývojáře
   │   └── project.yml              ← metadata projektu (repo URL, branch)
   └── mujprojekt/                  ← projektové repo (naklonované automaticky)
 ```
 
-### Tři vrstvy dat
+### Vrstvy dat
 
 | Volume | Mount | Účel | Sdílení |
 |--------|-------|------|---------|
 | `claude-shared` | `/home/node/.claude` | OAuth tokeny, globální nastavení | Across všechny devcontainery |
 | `<nazev>-git-credentials` | `/home/node/.gitcreds` | Git PAT (`~/.git-credentials`) | Per devcontainer |
-| `<nazev>-claude-project` | `/workspace/.claude` | CLAUDE.md, projektové nastavení | Per projekt |
 | `<nazev>-commandhistory` | `/commandhistory` | Bash/zsh historie | Per projekt |
-| Bind mount | `/workspace` | Zdrojový kód projektu | — |
+| Bind mount | `/workspace/<nazev>` | Zdrojový kód projektu | — |
+| Bind mount (`--local-claude`) | `/workspace/.claude` + `/workspace/<nazev>/.claude` | CLAUDE.md a projektová nastavení, verzovaná v devcontainer repu | Per projekt |
 
 Všechny volumes přežijí rebuild kontejneru. `claude-shared` a `<nazev>-git-credentials` se vytvoří automaticky při prvním spuštění (`init.sh`). Oba jsou `external: true`, takže `<nazev>-git-credentials` přežije i `docker compose down -v` — token zadáváš jen jednou za celý život devcontaineru.
+
+## Windows
+
+`initializeCommand` je řetěz `.devcontainer\init.cmd || .devcontainer/init`: na Windows
+ho spustí cmd.exe a padne na `init.cmd`, pod `/bin/sh` první token selže a Mac/Linux
+propadne na wrapper `init`. Veškerá logika zůstává v `init.sh`.
+
+- **Vyžaduje [Git for Windows](https://gitforwindows.org/)** — `init.cmd` ho hledá
+  v `%ProgramFiles%\Git` a `%LocalAppData%\Programs\Git`. Záměrně nepoužívá holý
+  `bash.exe` z PATH: v System32 je WSL bash.
+- **Konce řádků** řeší vygenerovaný `.gitattributes` (skripty LF, `*.cmd` CRLF).
+  Bez toho by CRLF rozbil heredoc v `Dockerfile`, který nastavuje `GH_TOKEN`.
+  Do repa, které už bylo commitnuté z Windows s CRLF, je potřeba jednou pustit
+  `git add --renormalize .`.
+- **Exec bit:** když generuješ na Windows, `chmod` je no-op a `.devcontainer/init`
+  se commitne bez práva ke spuštění → na macOS pak `initializeCommand` selže.
+  Náprava: `git update-index --chmod=+x .devcontainer/init`.
+- Na macOS se v Dev Containers logu vždy nejdřív objeví
+  `sh: .devcontainerinit.cmd: command not found` — očekávané, ne chyba.
 
 ## CLI parametry
 
@@ -226,14 +250,17 @@ tmux attach -t claude
 
 ### Projektové instrukce (CLAUDE.md)
 
-Volume `<nazev>-claude-project` se mountuje na `/workspace/.claude`. Vytvoř v něm `CLAUDE.md` s projektovými instrukcemi:
+S `--local-claude` se generují dva bind-mountované kontexty, oba verzované v devcontainer repu:
 
-```bash
-# Uvnitř kontejneru
-echo "# Projektové instrukce" > /workspace/.claude/CLAUDE.md
-```
+| Zdroj v devcontainer repu | Mount v kontejneru | K čemu |
+|---|---|---|
+| `.workspace-claude/CLAUDE.md` | `/workspace/.claude/CLAUDE.md` | Rozcestník — Claude Code běží s cwd `/workspace`, takže tohle čte první |
+| `.project-claude/CLAUDE.md` | `/workspace/<nazev>/.claude/CLAUDE.md` | Projektová pravidla |
 
-Soubor přežije rebuild kontejneru a projektové repo zůstane čisté (volume překryje adresář).
+Generátor je předvyplní skeletonem; workspace verze odkazuje na projektovou, ať řetěz
+`workspace → projekt` drží. Edituj je přes kteroukoli cestu (je to týž soubor)
+a **commituj z devcontainer repa** — v projektovém repu je `.claude/`
+v `.git/info/exclude`, takže se do zákazníkova repa nedostane.
 
 ## Vývoj
 

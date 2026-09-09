@@ -1,0 +1,40 @@
+# <%= name %> — workspace
+
+Workspace-level kontext pro Claude Code. Claude běží s cwd `/workspace`, takže
+tenhle soubor (`/workspace/.claude/CLAUDE.md`) čte jako první — je to rozcestník,
+ne místo pro projektová pravidla.
+
+## Repozitáře ve workspace
+
+| Repo | Co je uvnitř |
+|---|---|
+| `<%= name %>/` | Zákaznický projekt (`<%= repo %>`, branch `<%= branch %>`) — zdrojový kód |
+| `<%= name %>-devcontainer/` | Toto repo: devcontainer, `init.sh`, bind-mounty a **zdroje všech `.claude`** |
+
+## Kontext
+
+Řetězec: tento soubor → per-repo kontext → dokumentace daného repa. Projektový
+kontext se sem importuje (`@` = Claude Code import, cesta relativní k tomuto souboru),
+takže platí i když se pracuje z cwd `/workspace`:
+
+@../<%= name %>/.claude/CLAUDE.md
+
+**Projektová pravidla patří do `<%= name %>/.claude/CLAUDE.md`** (zdroj:
+`<%= name %>-devcontainer/.project-claude/CLAUDE.md`), ne sem. Sem jen to, co platí
+napříč celým workspace.
+
+Devcontainer repo vlastní kontext nemá — drží zdroje `.claude` a svůj
+[`README.md`](../<%= name %>-devcontainer/README.md).
+
+## Editace `.claude`
+
+Oba `.claude/` adresáře jsou bind-mounty z `<%= name %>-devcontainer/`
+(`.devcontainer/docker-compose.yml`) — editace přes kteroukoli cestu mění týž soubor:
+
+| Cesta v kontejneru | Zdroj v devcontainer repu |
+|---|---|
+| `/workspace/.claude/` | `<%= name %>-devcontainer/.workspace-claude/` |
+| `/workspace/<%= name %>/.claude/` | `<%= name %>-devcontainer/.project-claude/` |
+
+**Commituj je z `<%= name %>-devcontainer`** — v zákaznickém repu je `.claude/`
+v `.git/info/exclude`, takže je pro git neviditelné a do zákazníkova repa se nedostane.

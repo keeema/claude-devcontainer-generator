@@ -1,0 +1,10 @@
+@echo off
+rem Windows wrapper pro init.sh — spouští ho přes Git Bash.
+rem Záměrně bez fallbacku na holé bash.exe z PATH: v System32 je WSL bash.
+set "BASH=%ProgramFiles%\Git\bin\bash.exe"
+if not exist "%BASH%" set "BASH=%LocalAppData%\Programs\Git\bin\bash.exe"
+if not exist "%BASH%" (
+  echo Git for Windows not found - install https://gitforwindows.org/ >&2
+  exit /b 1
+)
+"%BASH%" "%~dp0init.sh" %*

@@ -1,0 +1,25 @@
+# Sjednocení konců řádků mezi Windows (Fork, VS Code) a Linuxem (build kontejneru, CI).
+#
+# Bez tohoto souboru se na Windows checkoutu s core.autocrlf=true vytvoří skripty
+# s CRLF. U Dockerfile to není jen kosmetika: heredoc `RUN cat >> ~/.zshenv <<'EOF'`
+# zkopíruje CRLF do ~/.zshenv, zsh na tom spadne ("parse error near \n") a blok
+# nastavující GH_TOKEN se nikdy neprovede — gh pak není přihlášené.
+#
+# Retrofit do repa, které už bylo commitnuté z Windows s CRLF, vyžaduje jednorázově
+# `git add --renormalize .`. Nově vygenerované repo to nepotřebuje.
+
+# Výchozí pravidlo: text rozpoznat automaticky, do repa ukládat vždy s LF.
+* text=auto
+
+# Soubory interpretované v Linuxu musí mít LF i ve Windows checkoutu.
+Dockerfile*     text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env*           text eol=lf
+
+# Extensionless sh wrapper pro initializeCommand (Mac/Linux) — není pokrytý *.sh.
+.devcontainer/init  text eol=lf
+
+# Batch soubory musí mít CRLF, jinak se cmd.exe může chovat nepředvídatelně.
+*.cmd           text eol=crlf
