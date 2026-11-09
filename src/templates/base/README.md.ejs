@@ -54,7 +54,7 @@ přidej do `forwardPorts` **holým číslem** (forwarduje localhost devcontainer
 ## Předpoklady
 
 - Docker Desktop nebo Docker Engine
-- VS Code s rozšířením **Dev Containers** (nebo JetBrains Gateway přes SSH)
+- VS Code s rozšířením **Dev Containers**
 - Přístup k `<%= repo %>` (SSH klíč nebo PAT)
 - **Windows navíc:** [Git for Windows](https://gitforwindows.org/) — `init.cmd`
   přes něj spouští `init.sh` (viz [Windows](#windows) níže)
@@ -124,10 +124,14 @@ Při **prvním** spuštění čeká Claude na OAuth přihlášení — připoj s
 `claude-shared` (sdílený přes všechny tvé devcontainery), takže příště
 Claude nastartuje rovnou.
 
-Z jiného stroje:
+### Přístup do kontejneru mimo VS Code
+
+Kontejner **nemá vlastní SSH server** a nepublikuje žádný port pro přihlášení.
+Dostaneš se do něj buď přes VS Code (Dev Containers), nebo z hostu přes Docker
+(z jiného stroje se nejdřív připoj přes SSH na host):
 
 ```bash
-docker exec -it <kontejner> bash
+docker exec -it <kontejner> zsh
 tmux attach -t claude
 ```
 
@@ -153,18 +157,10 @@ Kontejner má default-deny iptables firewall
 (`.devcontainer/init-firewall.sh`, spouští se přes `postStartCommand`,
 kontejner čeká na jeho dokončení). Povolené je jen nezbytné: Claude API,
 GitHub/GitLab, package registry (npm/yarn/pip/nuget<%= stack.firewall_domains && stack.firewall_domains.length ? ', ' + stack.firewall_domains.join(', ') : '' %>),
-DNS a SSH. Vše ostatní je blokováno.
+DNS a odchozí SSH (git). Vše ostatní je blokováno.
 
 Pro plný přístup k internetu přegeneruj devcontainer s `--full-internet`.
 <%_ } _%>
-
-## JetBrains IDE (volitelné)
-
-Kontejner exposuje SSH na portu **<%= sshPort %>** (mapováno z kontejneru `:22`):
-
-- JetBrains Gateway → *New SSH connection* → `<hostname>:<%= sshPort %>`,
-  user `node`, bez hesla
-- Backend běží uvnitř kontejneru, otevři `/workspace`
 <%_ if (localClaude) { _%>
 
 ## Claude kontext

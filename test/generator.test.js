@@ -311,48 +311,53 @@ describe('generate', () => {
     assert.ok(!content.includes('npm i -g @anthropic-ai/claude-code'));
   });
 
-  // --- SSH server ---
+  // --- Žádný SSH server v kontejneru ---
+  // Regrese: kontejner dřív pouštěl sshd s prázdným heslem uživatele node a
+  // publikoval ho na host — šlo se přihlásit ze sítě bez hesla i bez klíče.
 
-  it('Dockerfile contains openssh-server', () => {
+  it('Dockerfile does not install or configure an SSH server', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
-    assert.ok(content.includes('openssh-server'));
+    assert.ok(!content.includes('openssh-server'));
+    assert.ok(!content.includes('sshd'));
+    assert.ok(!content.includes('PermitEmptyPasswords'));
+    assert.ok(!content.includes('passwd -d'));
   });
 
-  it('docker-compose.yml contains sshd in command', () => {
+  it('Dockerfile keeps the SSH client (git over SSH)', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, '.devcontainer', 'Dockerfile'), 'utf-8');
+    assert.ok(content.includes('openssh-client'));
+  });
+
+  it('docker-compose.yml does not start sshd', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
-    assert.ok(content.includes('sshd'));
+    assert.ok(!content.includes('sshd'));
+    assert.ok(content.includes(`bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"`));
   });
 
-  it('docker-compose.yml contains default SSH port 2222:22', () => {
+  it('devcontainer service publishes no ports', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
-    assert.ok(content.includes('2222:22'));
+    assert.ok(!content.includes('ports:'));
+    assert.ok(!content.includes(':22"'));
   });
 
-  it('custom SSH port is propagated to docker-compose.yml', () => {
-    generate(opts({ sshPort: 3333 }));
+  it('no port maps to container port 22 even with services', () => {
+    generate(opts({ services: ['postgres', 'mongo', 'redis', 'azurite'] }));
     const content = readFileSync(join(outputDir, '.devcontainer', 'docker-compose.yml'), 'utf-8');
-    assert.ok(content.includes('3333:22'));
-    assert.ok(!content.includes('2222:22'));
+    assert.ok(!content.includes(':22"'));
   });
 
   // --- Port forwarding ---
 
-  it('forwardPorts is empty without services (SSH goes via publish)', () => {
+  it('forwardPorts is empty without services', () => {
     generate(opts());
     const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
     const json = parseJsonc(content);
     assert.deepEqual(json.forwardPorts, []);
-  });
-
-  it('forwardPorts never contains the SSH port', () => {
-    generate(opts({ sshPort: 3333, services: ['postgres'] }));
-    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = parseJsonc(content);
-    assert.ok(!json.forwardPorts.includes(3333));
-    assert.ok(!json.forwardPorts.includes(2222));
+    assert.deepEqual(json.portsAttributes, {});
   });
 
   it('forwardPorts uses "service:port" form for services', () => {
@@ -373,13 +378,6 @@ describe('generate', () => {
     assert.equal(json.portsAttributes['postgres:5432'].label, 'PostgreSQL');
     assert.equal(json.portsAttributes['postgres:5432'].onAutoForward, 'silent');
     assert.equal(json.portsAttributes['redis:6379'].label, 'Redis');
-  });
-
-  it('no SSH entry in portsAttributes', () => {
-    generate(opts());
-    const content = readFileSync(join(outputDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const json = parseJsonc(content);
-    assert.ok(!('2222' in json.portsAttributes));
   });
 
   it('azurite multi-port forwarding via "service:port"', () => {
@@ -580,10 +578,20 @@ describe('generate', () => {
     assert.ok(content.includes('git update-index --chmod=+x .devcontainer/init'));
   });
 
-  it('README.md uses the custom SSH port', () => {
-    generate(opts({ sshPort: 3333 }));
+  it('README.md does not advertise SSH into the container or JetBrains', () => {
+    generate(opts());
     const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
-    assert.ok(content.includes('3333'));
+    assert.ok(!content.includes('JetBrains'));
+    assert.ok(!content.includes('2222'));
+    assert.ok(!/SSH na portu|Gateway/.test(content));
+  });
+
+  it('README.md documents access via docker exec + tmux', () => {
+    generate(opts());
+    const content = readFileSync(join(outputDir, 'README.md'), 'utf-8');
+    assert.ok(content.includes('nemá vlastní SSH server'));
+    assert.ok(content.includes('docker exec -it <kontejner> zsh'));
+    assert.ok(content.includes('tmux attach -t claude'));
   });
 
   it('README.md lists the devcontainer repo among workspace repositories', () => {

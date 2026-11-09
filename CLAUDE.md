@@ -52,7 +52,7 @@ a commitovat přímo zevnitř kontejneru. Vývojář otevírá **workspace soubo
 (`code <nazev>.code-workspace`), ne adresář — workspace soubor mountuje obě
 repa a zapíná auto-attach task (viz tmux níže).
 
-Po vygenerování CLI vypíše stručné instrukce a ukáže na vygenerovaný `README.md`, který obsahuje kompletní project-specific návod (jak spustit kontejner, tmux, git PAT, JetBrains, volumes).
+Po vygenerování CLI vypíše stručné instrukce a ukáže na vygenerovaný `README.md`, který obsahuje kompletní project-specific návod (jak spustit kontejner, tmux, přístup přes `docker exec`, git PAT, volumes).
 
 ### Požadavek: plně funkční Claude Code sandbox
 
@@ -63,6 +63,7 @@ Generovaný devcontainer MUSÍ být plně funkční prostředí pro Claude Code 
 Založený na base image podle zvoleného stacku (Node.js, Python, .NET). Obsahuje:
 
 - **Vývojářské nástroje:** git, zsh (s oh-my-zsh a pluginy), tmux (s rozumným výchozím .tmux.conf — historie, myš, status bar), ripgrep, fzf, curl, jq
+- **Žádný SSH server:** v kontejneru neběží `sshd` a devcontainer služba nepublikuje žádný port. Instaluje se jen `openssh-client` (git přes SSH ven). Do kontejneru se vstupuje přes VS Code (Dev Containers) nebo z hostu `docker exec -it <kontejner> zsh` + `tmux attach -t claude`. Dřívější `sshd` s prázdným heslem uživatele `node` (kvůli JetBrains Gateway, volba `--ssh-port`) byl odstraněn — port publikovaný Dockerem obchází `ufw` a šlo se přihlásit ze sítě bez hesla i klíče. Nevracet.
 - **Node.js:** automaticky doinstalovaný pro non-Node stacky (Python, .NET) — potřeba pro Claude Code
 - **Claude Code:** nainstalovaný přes nativní instalátor (`curl -fsSL https://claude.ai/install.sh | bash`) jako uživatel `node` — auto-update funguje bez rootu (binárka v `~/.local/bin/claude`, update data v `~/.local/share/claude`)
 - **Firewall script** (bez `--full-internet`): zkopírovaný do `/usr/local/bin/init-firewall.sh`
@@ -77,7 +78,7 @@ Generuje se jen bez `--full-internet` flagu. Iptables firewall s default-deny po
 - **Claude API:** `api.anthropic.com`, `statsig.anthropic.com`, `sentry.io`
 - **Package managers:** `registry.npmjs.org`, `registry.yarnpkg.com`, `pypi.org`, `files.pythonhosted.org`, `api.nuget.org`
 - **Git:** `github.com`, `gitlab.com`
-- **DNS a SSH:** vždy povoleny
+- **DNS a odchozí SSH:** vždy povoleny (příchozí SSH do kontejneru neexistuje — viz Dockerfile výše)
 - **Vše ostatní:** zablokováno
 
 Stack definice může přidat další domény přes `firewall_domains`.
@@ -249,7 +250,7 @@ V `docker-compose.yml` je `command` nastavený tak, že kontejner při startu:
 To umožňuje:
 
 - Odpojit se od kontejneru a Claude dál pracuje
-- Připojit se z jiného stroje (SSH z telefonu, jiný počítač) a vidět co Claude dělá
+- Připojit se z jiného stroje (SSH na **host** z telefonu / jiného počítače, pak `docker exec`) a vidět co Claude dělá
 - Mít víc terminálů — jeden s Claude v tmux, ostatní volné pro git, testy atd.
 
 Generovaný devcontainer musí zajistit:
@@ -272,7 +273,7 @@ Typický workflow:
 - Ráno: VS Code → "Reopen in Container" → terminál → `tmux attach -t claude` → Claude už běží
 - Přes den: sledujete/ovládáte Claude, zadáváte úkoly
 - Zavřete VS Code → Claude pracuje dál v tmux
-- Z telefonu: SSH na VM → `docker exec -it <kontejner> bash` → `tmux attach -t claude`
+- Z telefonu: SSH na VM (host) → `docker exec -it <kontejner> zsh` → `tmux attach -t claude`
 - Večer: VS Code znovu → terminál → `tmux attach -t claude` → Claude má hotovo
 
 ### init.sh — automatický clone

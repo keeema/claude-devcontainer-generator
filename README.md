@@ -196,7 +196,7 @@ Ve výchozím stavu kontejner povoluje jen:
 - **Claude API** — `api.anthropic.com`, `statsig.anthropic.com`, `sentry.io`
 - **Git** — `github.com`, `gitlab.com`
 - **Package managers** — npm, yarn, pip, nuget
-- **DNS a SSH**
+- **DNS a odchozí SSH** (git přes SSH)
 
 Vše ostatní je blokováno přes iptables (kontejner má `NET_ADMIN` capability). Pro plný přístup k internetu použij `--full-internet` — firewall se vůbec nevytvoří.
 
@@ -235,17 +235,19 @@ tmux attach -t claude
 # Odpojení (Claude dál pracuje)
 Ctrl+B, pak D
 
-# Z jiného stroje přes SSH
-docker exec -it <kontejner> bash
+# Mimo VS Code — z hostu (z jiného stroje nejdřív SSH na host)
+docker exec -it <kontejner> zsh
 tmux attach -t claude
 ```
+
+Kontejner **nemá vlastní SSH server** a nepublikuje žádný port pro přihlášení — vstupuje se do něj jen přes VS Code (Dev Containers) nebo přes `docker exec` z hostu.
 
 ### Typický workflow
 
 1. **Ráno:** VS Code → "Reopen in Container" → terminál → `tmux attach -t claude`
 2. **Přes den:** zadáváš úkoly, sleduješ výstup
 3. **Odcházíš:** `Ctrl+B, D` — Claude pracuje dál, můžeš zavřít VS Code
-4. **Z telefonu:** SSH na stroj → `docker exec -it <kontejner> bash` → `tmux attach -t claude`
+4. **Z telefonu:** SSH na hostitelský stroj → `docker exec -it <kontejner> zsh` → `tmux attach -t claude`
 5. **Další den:** VS Code znovu → `tmux attach -t claude` → Claude má hotovo
 
 ### Projektové instrukce (CLAUDE.md)

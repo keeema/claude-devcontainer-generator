@@ -22,10 +22,10 @@ services:
       - ../../<%= name %>-devcontainer/.project-claude:/workspace/<%= name %>/.claude:cached
 <%_ } _%>
       - <%= name %>-commandhistory:/commandhistory
-    ports:
-      - "<%= sshPort %>:22"
+    # Vstup do kontejneru: VS Code (Reopen in Container), nebo z hostu
+    # `docker exec -it <kontejner> zsh` a `tmux attach -t claude`.
     command: >
-      bash -c "sudo /usr/sbin/sshd && tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
+      bash -c "tmux new-session -d -s claude 'claude --dangerously-skip-permissions' && sleep infinity"
 <%_ if (!fullInternet) { _%>
     cap_add:
       - NET_ADMIN

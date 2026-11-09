@@ -52,13 +52,13 @@ function renderTemplate(templateName, context) {
  * Generuje kompletní devcontainer repo do output adresáře.
  */
 export function generate(options) {
-  const { name, repo, branch = 'main', stack: stackName = 'nodejs', services: selectedServices = [], fullInternet = false, includeCompose = false, localClaude = false, sshPort = 2222, output } = options;
+  const { name, repo, branch = 'main', stack: stackName = 'nodejs', services: selectedServices = [], fullInternet = false, includeCompose = false, localClaude = false, output } = options;
 
   const stack = loadStack(stackName);
   const services = loadServices(selectedServices);
   const serviceVolumes = extractServiceVolumes(services);
 
-  const context = { name, repo, branch, stack, services, serviceVolumes, fullInternet, includeCompose, localClaude, sshPort };
+  const context = { name, repo, branch, stack, services, serviceVolumes, fullInternet, includeCompose, localClaude };
 
   const devcontainerDir = join(output, '.devcontainer');
   mkdirSync(devcontainerDir, { recursive: true });
@@ -102,7 +102,7 @@ export function generate(options) {
 /**
  * Vypíše instrukce po vygenerování.
  */
-export function printInstructions(name, output, { localClaude = false, sshPort = 2222 } = {}) {
+export function printInstructions(name, output, { localClaude = false } = {}) {
   let claudeInfo = '';
   if (localClaude) {
     claudeInfo = `
@@ -114,8 +114,6 @@ export function printInstructions(name, output, { localClaude = false, sshPort =
    exclude zákaznického repa.
 `;
   }
-
-  const jetbrainsStep = localClaude ? '7' : '6';
 
   console.log(`
 === Devcontainer vygenerován: ${output} ===
@@ -143,10 +141,8 @@ Kompletní návod je ve vygenerovaném ${output}/README.md.
    Uloženo v externím volume ${name}-git-credentials. gh CLI si token
    načte automaticky přes GH_TOKEN.
 ${claudeInfo}
-${jetbrainsStep}. JetBrains IDE (PyCharm, IntelliJ, ...) — přes Gateway:
-   - Kontejner exposuje SSH na portu ${sshPort} (mapovaný z kontejneru :22)
-   - PyCharm Gateway → SSH na <hostname>:${sshPort}, user: node, bez hesla
-   - Backend běží uvnitř kontejneru, otevřete /workspace
-   - Interpreter (Python/Node) je přímo v kontejneru, žádná další konfigurace
+Přístup do kontejneru mimo VS Code (kontejner nemá SSH server) — z hostu:
+   docker exec -it <kontejner> zsh
+   tmux attach -t claude
 `);
 }

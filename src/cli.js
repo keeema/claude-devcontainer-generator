@@ -16,7 +16,6 @@ program
   .option('--full-internet', 'Allow full internet access (skip firewall)', false)
   .option('--include-compose', 'Include project docker-compose.yml via compose include', false)
   .option('--local-claude', 'Mount .claude from devcontainer repo (.project-claude/) instead of Docker volume', false)
-  .option('--ssh-port <port>', 'SSH port for JetBrains IDE access (default: 2222)', '2222')
   .requiredOption('--output <path>', 'Output directory path')
   .action((options) => {
     try {
@@ -24,9 +23,8 @@ program
       if (!options.name) {
         options.name = nameFromRepo(options.repo);
       }
-      const sshPort = parseInt(options.sshPort, 10);
-      generate({ ...options, services, sshPort });
-      printInstructions(options.name, options.output, { localClaude: options.localClaude, sshPort });
+      generate({ ...options, services });
+      printInstructions(options.name, options.output, { localClaude: options.localClaude });
     } catch (err) {
       console.error(`Error: ${err.message}`);
       process.exit(1);

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     jq \
     sudo \
-    openssh-server \
+    openssh-client \
 <%_ if (!fullInternet) { _%>
     iptables \
     dnsutils \
@@ -85,11 +85,6 @@ RUN mkdir -p /home/node/.claude && chown node:node /home/node/.claude
 
 # Pre-create .gitcreds dir so the empty per-devcontainer volume inherits correct ownership
 RUN mkdir -p /home/node/.gitcreds && chown node:node /home/node/.gitcreds
-
-# SSH server for JetBrains IDE access
-RUN mkdir -p /run/sshd \
-    && sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config \
-    && passwd -d node
 
 # Sudoers — full sudo for node (devcontainer is an isolated environment)
 RUN echo 'node ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/node \

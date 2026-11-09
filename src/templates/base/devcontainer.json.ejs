@@ -24,9 +24,6 @@ if (stack.vscode_extensions) {
 // "service:containerPort" — holé číslo by tunelovalo localhost devcontaineru,
 // kde tyto služby neposlouchají (viz containers.dev json_reference). Klíč v
 // portsAttributes musí přesně odpovídat zápisu ve forwardPorts.
-//
-// SSH (sshd uvnitř na :22) se neforwarduje — je dostupné přes <host>:<sshPort>
-// z docker-compose publish (host = localhost lokálně / hostname dev serveru).
 const forwardPorts = [];
 const portsAttributes = {};
 
@@ -66,7 +63,6 @@ for (const [svcName, svc] of Object.entries(services)) {
   // <host>:<port>. Proces běžící UVNITŘ devcontaineru (dev server frontendu/
   // backendu) forwarduj holým číslem — užitečné pro stabilní OIDC redirect URI na
   // localhost, např.: "forwardPorts": [5173, <%- forwardPorts.length ? JSON.stringify(forwardPorts[0]) : '"postgres:5432"' %>].
-  // SSH: připoj se přes <host>:<%= sshPort %>.
   "forwardPorts": <%- JSON.stringify(forwardPorts) %>,
 
   "portsAttributes": <%- JSON.stringify(portsAttributes, null, 2).replace(/\n/g, '\n  ') %>,
